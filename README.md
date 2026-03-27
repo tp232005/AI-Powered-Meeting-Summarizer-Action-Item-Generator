@@ -2,7 +2,6 @@
 PROJECT LOGBOOK
 AI-Powered Meeting Summarizer & Action Item Generator
 
-Repository: hp30122005/AI-Powered-Meeting-Summarizer-Action-Item-Generator
 Duration: 04 February 2026 – 27 March 2026
 
 
@@ -323,16 +322,23 @@ Deployment — Completed
 Technologies Used
 
 Python
+
 Streamlit
+
 Google Gemini API
+
 SQLite
-Plotly
-Chart.js
+
 SpeechRecognition
+
 HTML
+
 CSS
+
 JavaScript
+
 Git
+
 GitHub
 
 
