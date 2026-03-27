@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MeetMind — AI Meeting Summarizer</title>
+  <meta name="description" content="Automatically summarize meetings, extract action items, decisions, and speaker sentiment with advanced NLP — no API key required." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     SIDEBAR NAVIGATION
+════════════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="8" fill="url(#lg)"/>
+        <path d="M8 10h16M8 15h10M8 20h12" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="24" cy="21" r="5" fill="#38bdf8"/>
+        <path d="M22 21l1.5 1.5L26 19" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#7c3aed"/><stop offset="1" stop-color="#4f46e5"/>
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+    <div class="logo-text">
+      <span class="logo-name">MeetMind</span>
+      <span class="logo-sub">AI Summarizer</span>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <button class="nav-item" data-section="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="nav-item" data-section="results">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>Results</span>
+    </button>
+    <button class="nav-item" data-section="history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>History</span>
+    </button>
+    <button class="nav-item" data-section="analytics">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span>Analytics</span>
+    </button>
+    <button class="nav-item" data-section="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="version-badge">v2.0 · Research Edition</div>
+  </div>
+</aside>
+
+<!-- ══════════════════════════════════════════
+     MAIN CONTENT
+════════════════════════════════════════════ -->
+<main class="main">
+
+  <!-- ─── HERO / HOME ─────────────────────── -->
+  <section id="home-section" class="section active">
+    <div class="hero">
+      <div class="hero-badge">🎓 Semester Project · AI-Powered NLP</div>
+      <h1 class="hero-title">Turn Meetings Into <span class="gradient-text">Actionable Intelligence</span></h1>
+      <p class="hero-subtitle">Advanced NLP engine with TF-IDF summarization, speaker diarization, sentiment analysis, action item extraction, and beautiful visualizations — entirely in the browser.</p>
+      <div class="hero-pills">
+        <span class="pill">✦ TF-IDF Summarization</span>
+        <span class="pill">✦ Speaker Diarization</span>
+        <span class="pill">✦ Sentiment Analysis</span>
+        <span class="pill">✦ Action Item Extraction</span>
+        <span class="pill">✦ Decision Detection</span>
+        <span class="pill">✦ Topic Segmentation</span>
+      </div>
+    </div>
+
+    <!-- Input Card -->
+    <div class="card input-card">
+      <div class="card-header">
+        <h2 class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Analyze Meeting
+        </h2>
+        <div class="input-meta">
+          <input id="meeting-title-input" class="title-input" type="text" placeholder="Meeting title (optional)..." maxlength="80" />
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="text">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6M9 16h6M7 3h10a2 2 0 012 2v14a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
+          Text Transcript
+        </button>
+        <button class="tab-btn" data-tab="audio">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          Audio / Record
+        </button>
+      </div>
+
+      <!-- Text Panel -->
+      <div id="text-panel" class="tab-panel active">
+        <div class="textarea-wrapper">
+          <textarea id="transcript-input" class="transcript-textarea" placeholder="Paste your meeting transcript here...
+
+Supports speaker diarization — use format:
+  Sarah: Good morning everyone...
+  James: Let's start with the agenda...
+  [Speaker Name] text also works
+
+Or just paste unformatted meeting minutes." rows="12"></textarea>
+          <div class="textarea-actions">
+            <button id="load-sample-btn" class="btn btn-ghost btn-sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Load Sample
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('transcript-input').value=''">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+              Clear
+            </button>
+          </div>
+        </div>
+        <div class="summary-length-row">
+          <label for="summary-length" class="setting-label">Summary sentences:</label>
+          <input id="summary-length" type="range" min="2" max="12" value="5" class="range-input" oninput="document.getElementById('summary-len-val').textContent=this.value" />
+          <span id="summary-len-val" class="range-val">5</span>
+        </div>
+      </div>
+
+      <!-- Audio Panel -->
+      <div id="audio-panel" class="tab-panel">
+        <div class="audio-zone">
+          <!-- Waveform -->
+          <div class="waveform-wrap">
+            <canvas id="waveform-canvas" width="700" height="80"></canvas>
+          </div>
+          <div id="audio-status" class="audio-status-text"></div>
+
+          <!-- Record Controls -->
+          <div class="audio-controls">
+            <button id="record-btn" class="btn btn-record">
+              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+              Start Recording
+            </button>
+            <button id="stop-btn" class="btn btn-stop" disabled>
+              <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+              Stop
+            </button>
+          </div>
+
+          <!-- File Upload -->
+          <div class="upload-area">
+            <div class="upload-divider"><span>or upload audio file</span></div>
+            <label class="file-upload-label">
+              <input id="audio-file-input" type="file" accept=".mp3,.wav,.ogg,.m4a,.mp4" hidden />
+              <div class="file-upload-box" onclick="document.getElementById('audio-file-input').click()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span id="file-label">Click to upload MP3, WAV, OGG, M4A</span>
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Analyze Button -->
+      <div class="analyze-row">
+        <button id="analyze-btn" class="btn btn-primary btn-lg">
+          <span class="btn-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><polyline points="21 21 16 16"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </span>
+          <span class="btn-label">Analyze Meeting</span>
+          <span class="btn-spinner"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Feature Highlights -->
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(167,139,250,.15);color:#a78bfa">🧠</div>
+        <h3>TF-IDF Summarization</h3>
+        <p>Positional-weighted TF-IDF scoring with deduplication via Jaccard similarity — surpassing basic extractive approaches</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(56,189,248,.15);color:#38bdf8">🎙️</div>
+        <h3>Speaker Diarization</h3>
+        <p>Automatically detects speakers from <code>Name: text</code> or <code>[Name]</code> format and profiles each participant</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(52,211,153,.15);color:#34d399">📋</div>
+        <h3>Action Item Extraction</h3>
+        <p>Multi-pattern regex engine detects tasks, assigns owners, extracts deadlines — handles 10+ linguistic patterns</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(251,191,36,.15);color:#fbbf24">😊</div>
+        <h3>Per-Speaker Sentiment</h3>
+        <p>Lexicon-based sentiment scoring per participant — see who's optimistic, neutral, or concerned in real-time</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(244,114,182,.15);color:#f472b6">🗂️</div>
+        <h3>Topic Segmentation</h3>
+        <p>Keyword-overlap clustering groups meeting into distinct discussion segments with visual timeline</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(251,146,60,.15);color:#fb923c">📤</div>
+        <h3>Rich Export</h3>
+        <p>Export full analysis as PDF, Markdown, or JSON — or copy to clipboard with one click</p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ─── RESULTS DASHBOARD ─────────────── -->
+  <section id="results-section" class="section">
+    <div class="section-header">
+      <div>
+        <h2 id="result-title" class="section-title">Meeting Results</h2>
+        <p class="section-sub">AI-powered meeting intelligence</p>
+      </div>
+      <!-- Export toolbar -->
+      <div class="export-toolbar">
+        <button id="export-md-btn" class="btn btn-ghost btn-sm" title="Download Markdown">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          .md
+        </button>
+        <button id="export-json-btn" class="btn btn-ghost btn-sm" title="Download JSON">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          JSON
+        </button>
+        <button id="export-pdf-btn" class="btn btn-ghost btn-sm" title="Print / Save as PDF">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          PDF
+        </button>
+        <button id="copy-btn" class="btn btn-ghost btn-sm" title="Copy to Clipboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          Copy
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+      <div class="stat-item">
+        <div id="stat-words" class="stat-value">—</div>
+        <div class="stat-label">Words</div>
+      </div>
+      <div class="stat-item">
+        <div id="stat-duration" class="stat-value">—</div>
+        <div class="stat-label">Est. Duration</div>
+      </div>
+      <div class="stat-item">
+        <div id="stat-speakers" class="stat-value">—</div>
+        <div class="stat-label">Speakers</div>
+      </div>
+      <div class="stat-item">
+        <div id="stat-actions" class="stat-value">—</div>
+        <div class="stat-label">Action Items</div>
+      </div>
+      <div class="stat-item">
+        <div id="stat-decisions" class="stat-value">—</div>
+        <div class="stat-label">Decisions</div>
+      </div>
+      <div class="stat-item">
+        <div id="stat-sentiment" class="stat-value">—</div>
+        <div class="stat-label">Sentiment</div>
+      </div>
+    </div>
+
+    <!-- Results Grid -->
+    <div class="results-grid">
+
+      <!-- Summary -->
+      <div class="card result-card span-2">
+        <div class="result-card-header">
+          <span class="result-icon">📋</span>
+          <h3>Meeting Summary</h3>
+        </div>
+        <p id="summary-text" class="summary-text">Your summary will appear here after analysis.</p>
+      </div>
+
+      <!-- Key Points -->
+      <div class="card result-card">
+        <div class="result-card-header">
+          <span class="result-icon">💡</span>
+          <h3>Key Points</h3>
+        </div>
+        <ul id="key-points-list" class="key-points-list"></ul>
+      </div>
+
+      <!-- Decisions -->
+      <div class="card result-card">
+        <div class="result-card-header">
+          <span class="result-icon">⚖️</span>
+          <h3>Decisions Made</h3>
+        </div>
+        <div id="decisions-list" class="decisions-list"></div>
+      </div>
+
+      <!-- Action Items -->
+      <div class="card result-card span-2">
+        <div class="result-card-header">
+          <span class="result-icon">✅</span>
+          <h3>Action Items</h3>
+          <span class="result-hint">Click status badge to toggle done/pending</span>
+        </div>
+        <div id="action-items-list" class="action-items-list"></div>
+      </div>
+
+      <!-- Speakers -->
+      <div class="card result-card">
+        <div class="result-card-header">
+          <span class="result-icon">👥</span>
+          <h3>Participants</h3>
+        </div>
+        <div id="speakers-list" class="speakers-list"></div>
+      </div>
+
+      <!-- Keywords -->
+      <div class="card result-card">
+        <div class="result-card-header">
+          <span class="result-icon">🏷️</span>
+          <h3>Keywords</h3>
+        </div>
+        <div id="keywords-cloud" class="keywords-cloud"></div>
+        <div class="readability-row">
+          <span id="readability-label" class="readability-label">—</span>
+          <span class="readability-hint">readability · </span>
+          <span id="readability-score" class="readability-score">—</span>
+        </div>
+      </div>
+
+      <!-- Topics -->
+      <div class="card result-card span-2">
+        <div class="result-card-header">
+          <span class="result-icon">🗂️</span>
+          <h3>Discussion Topics</h3>
+        </div>
+        <div id="topics-list" class="topics-list"></div>
+      </div>
+
+      <!-- Visualizations -->
+      <div class="card result-card viz-card">
+        <div class="result-card-header">
+          <span class="result-icon">☁️</span>
+          <h3>Word Cloud</h3>
+        </div>
+        <canvas id="wordcloud-canvas" width="450" height="220"></canvas>
+      </div>
+
+      <div class="card result-card viz-card">
+        <div class="result-card-header">
+          <span class="result-icon">📊</span>
+          <h3>Speaker Sentiment</h3>
+        </div>
+        <canvas id="sentiment-canvas" width="450" height="220"></canvas>
+      </div>
+
+      <div class="card result-card span-2 viz-card">
+        <div class="result-card-header">
+          <span class="result-icon">⏱️</span>
+          <h3>Topic Timeline</h3>
+        </div>
+        <canvas id="timeline-canvas" width="900" height="160"></canvas>
+      </div>
+
+      <!-- Score Rings -->
+      <div class="card result-card span-2">
+        <div class="result-card-header">
+          <span class="result-icon">🎯</span>
+          <h3>Meeting Score Card</h3>
+        </div>
+        <div class="rings-row">
+          <div class="ring-wrap">
+            <canvas id="ring-action" width="120" height="120"></canvas>
+            <p class="ring-label">Action Density</p>
+          </div>
+          <div class="ring-wrap">
+            <canvas id="ring-engagement" width="120" height="120"></canvas>
+            <p class="ring-label">Engagement</p>
+          </div>
+          <div class="ring-wrap">
+            <canvas id="ring-clarity" width="120" height="120"></canvas>
+            <p class="ring-label">Clarity</p>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /results-grid -->
+  </section>
+
+
+  <!-- ─── HISTORY ───────────────────────── -->
+  <section id="history-section" class="section">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Meeting History</h2>
+        <p class="section-sub">All analyzed meetings saved locally in your browser</p>
+      </div>
+      <div class="history-controls">
+        <input id="history-search" type="text" placeholder="Search meetings..." class="search-input" />
+        <button id="clear-history-btn" class="btn btn-ghost btn-sm danger">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3-3h8"/></svg>
+          Clear All
+        </button>
+      </div>
+    </div>
+    <div id="history-list" class="history-list"></div>
+  </section>
+
+
+  <!-- ─── ANALYTICS ─────────────────────── -->
+  <section id="analytics-section" class="section">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Analytics Dashboard</h2>
+        <p class="section-sub">Insights across all your analyzed meetings</p>
+      </div>
+    </div>
+    <div id="analytics-content" class="analytics-content"></div>
+  </section>
+
+
+  <!-- ─── SETTINGS ──────────────────────── -->
+  <section id="settings-section" class="section">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Settings</h2>
+        <p class="section-sub">Customize your experience</p>
+      </div>
+    </div>
+    <div class="settings-grid">
+      <div class="card settings-card">
+        <h3 class="settings-group-title">Appearance</h3>
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-name">Light Mode</span>
+            <span class="setting-desc">Switch to a light theme</span>
+          </div>
+          <label class="toggle-switch">
+            <input id="theme-toggle" type="checkbox" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="card settings-card">
+        <h3 class="settings-group-title">About This Project</h3>
+        <div class="about-info">
+          <p><strong>MeetMind</strong> is a fully client-side AI meeting summarizer built for a semester research project. It implements advanced NLP techniques entirely in vanilla JavaScript — no external APIs or backend required.</p>
+          <div class="tech-chips">
+            <span class="tech-chip">TF-IDF Algorithm</span>
+            <span class="tech-chip">Jaccard Similarity</span>
+            <span class="tech-chip">Lexicon Sentiment</span>
+            <span class="tech-chip">Web Audio API</span>
+            <span class="tech-chip">Canvas 2D</span>
+            <span class="tech-chip">LocalStorage</span>
+          </div>
+          <table class="comparison-table">
+            <thead>
+              <tr><th>Feature</th><th>Baseline Papers</th><th>MeetMind</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Summarization</td><td>Basic TF-IDF</td><td>✅ TF-IDF + positional + dedup</td></tr>
+              <tr><td>Action Items</td><td>Simple regex</td><td>✅ 10+ patterns + assignee + date</td></tr>
+              <tr><td>Speaker Diarization</td><td>❌ None</td><td>✅ Multi-format auto-detect</td></tr>
+              <tr><td>Sentiment</td><td>❌ None</td><td>✅ Per-speaker lexicon</td></tr>
+              <tr><td>Topic Segmentation</td><td>❌ None</td><td>✅ Keyword clustering</td></tr>
+              <tr><td>Visualization</td><td>❌ None</td><td>✅ Word cloud, charts, timeline</td></tr>
+              <tr><td>Audio Input</td><td>❌ None</td><td>✅ Web Audio API + file upload</td></tr>
+              <tr><td>Export</td><td>❌ None</td><td>✅ PDF, Markdown, JSON</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main><!-- /main -->
+
+<!-- Scripts — order matters -->
+<script src="js/nlp.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/visualizations.js"></script>
+<script src="js/export.js"></script>
+<script src="js/history.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
