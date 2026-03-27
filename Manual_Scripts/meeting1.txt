@@ -1,0 +1,9 @@
+Rahul: Good morning everyone.
+Harshal: Good morning. Today we need to finalize the AI meeting summarization project timeline.
+Priya: The backend using Python and Ollama is already working.
+Rohan: Frontend UI design is 50 percent complete.
+Harshal: We need to integrate PDF upload and transcript summarization next.
+Priya: I can complete database schema by Friday.
+Rahul: Great. Let us set the final demo date as 15th March.
+Rohan: I will handle testing and debugging.
+Harshal: Perfect. Let us meet again next Monday for progress review.

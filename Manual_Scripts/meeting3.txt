@@ -1,0 +1,9 @@
+Harshal: Today we will review the system architecture.
+Riya: The chatbot with memory is functioning properly using Ollama.
+Arjun: However, response time is slightly high.
+Harshal: We can optimize by using a smaller model.
+Riya: Also, we should implement vector database for semantic search.
+Arjun: I will test performance metrics and memory usage.
+Harshal: Good. Let us also add action item extraction feature.
+Riya: I will work on summarization accuracy improvements.
+Harshal: Final review meeting will be scheduled next week.
