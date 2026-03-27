@@ -91,9 +91,9 @@ Topic: Building LLM Engine
 Functions implemented:
 
 - initialize_gemini()
-- 
+  
 - summarize_transcript()
-- 
+  
 - extract_action_items()
 
 Encountered API error which was fixed by updating model to:
@@ -173,7 +173,7 @@ Audio Transcription Module
 Implemented:
 
 - record_audio()
-- 
+  
 - transcribe_audio()
 
 Library used:
@@ -215,9 +215,9 @@ Meeting History & Export
 Added:
 
 - Meeting history page
-- 
+  
 - Export summary as TXT
-- 
+  
 - Export tasks as CSV
 
 Outcome:
@@ -233,11 +233,11 @@ UI Styling Improvements
 Added:
 
 - Dark mode
-- 
+ 
 - Glassmorphism UI
-- 
+ 
 - Improved fonts
-- 
+ 
 - Better color contrast
 
 Outcome:
