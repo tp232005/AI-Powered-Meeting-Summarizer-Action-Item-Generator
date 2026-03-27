@@ -1,5 +1,6 @@
 
 PROJECT LOGBOOK
+
 AI-Powered Meeting Summarizer & Action Item Generator
 
 Duration: 04 February 2026 – 27 March 2026
