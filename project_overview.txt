@@ -1,0 +1,282 @@
+================================================================================
+           MEETMIND — AI MEETING SUMMARIZER
+           Project Overview Script
+           Generated: March 27, 2026
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 1 — PROJECT INTRODUCTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Project Name   : MeetMind — AI Meeting Summarizer
+Project Type   : Artificial Intelligence / Natural Language Processing
+Category       : Software / IT / AI / Data Science
+Platform       : Web Application (Streamlit + HTML Frontend)
+Date           : 2026
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 2 — PROBLEM STATEMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+In today's fast-paced professional environment, meetings are one of the most
+critical yet least efficiently documented activities in organizations.
+
+Key Problems Identified:
+  - Over 60% of meeting outcomes go undocumented after the meeting ends.
+  - Manual note-taking is inconsistent, time-consuming, and error-prone.
+  - Team members often leave meetings with conflicting understandings of
+    decisions made and tasks assigned.
+  - Action items assigned during meetings are frequently forgotten or missed.
+  - Risks and blockers discussed verbally are rarely tracked systematically.
+  - Post-meeting follow-up emails take 30-60 minutes to draft manually.
+  - No automated way to measure how productive a meeting actually was.
+
+These problems result in:
+  -> Lost productivity
+  -> Missed deadlines
+  -> Poor accountability
+  -> Repeated discussions in future meetings
+  -> Leadership lacking visibility into meeting outcomes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 3 — PROJECT IMPORTANCE & OBJECTIVES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MeetMind is an AI-powered meeting intelligence platform that automatically
+transforms raw meeting transcripts into structured, actionable insights
+without any manual effort.
+
+Why This Project Matters:
+
+  [1] TIME SAVING
+      Saves 30-60 minutes of post-meeting documentation per session.
+      Automatically generates summaries, task lists, and follow-up emails.
+
+  [2] ACCOUNTABILITY
+      Automatically detects who said what and assigns tasks to named
+      participants. Creates a clear record of decisions made.
+
+  [3] RISK MANAGEMENT
+      Flags risks, blockers, and concerns mentioned in the meeting with
+      severity ratings (High / Medium / Low), enabling proactive action.
+
+  [4] LEADERSHIP INSIGHTS
+      Generates executive-style summaries and professional follow-up emails
+      suitable for direct use by managers and leadership teams.
+
+  [5] PRIVACY & SECURITY
+      Runs entirely offline using a local LLM (Ollama + LLaMA 3.2).
+      No meeting data is sent to any external cloud service.
+
+  [6] PRODUCTIVITY MEASUREMENT
+      Scores each meeting on a scale of 0-100 (Grade A to F) based on
+      action density, decision quality, participation balance, and clarity.
+
+  [7] KNOWLEDGE RETENTION
+      All analyses are stored in a persistent SQLite knowledge base,
+      allowing trend analysis across multiple meetings over time.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 4 — KEY FEATURES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Feature                    Description
+  ─────────────────────────────────────────────────────────────────────────
+  Multi-Level Summaries    : Short (3 sentences), Detailed (7 sentences),
+                             and Executive-style — all auto-generated.
+
+  Task/Action Extraction   : Extracts action items with assignee name,
+                             deadline date, priority (High/Med/Low),
+                             and status (pending/done).
+
+  Decision Detection       : Identifies every firm decision made during
+                             the meeting using pattern matching + LLM.
+
+  Risk Detection           : Flags risks and blockers with severity levels.
+                             Detects budget, deadline, security concerns.
+
+  Topic Segmentation       : Breaks the meeting into conversation topics
+                             automatically using cosine similarity.
+
+  Speaker Analysis         : Measures each participant's contribution (%),
+                             word count, utterances, and sentiment.
+
+  Sentiment Analysis       : Evaluates meeting tone (Positive/Neutral/
+                             Negative) overall and per speaker.
+
+  Productivity Score       : Composite meeting score (0-100) with grade
+                             breakdown across 5 dimensions.
+
+  Keyword Extraction       : Top keywords extracted using TF-IDF scoring.
+
+  Email Report Generation  : AI-drafted professional follow-up email
+                             using LLaMA 3.2 via Ollama.
+
+  Knowledge Base           : Persistent SQLite storage of all meetings
+                             with full history and trend analytics.
+
+  Analytics Dashboard      : Streamlit-powered visualization of trends,
+                             charts, and historical meeting data.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 5 — TECHNOLOGIES USED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  CORE LANGUAGE
+  ─────────────────────────────────────────────────────────────────────────
+  Python 3.10+         : Main programming language for backend, NLP,
+                         LLM integration, and Streamlit dashboard.
+  HTML / CSS           : Standalone frontend interface (index.html + styles)
+  JavaScript           : Frontend logic for history and visualization panels.
+
+  ─────────────────────────────────────────────────────────────────────────
+  NLP & MACHINE LEARNING LIBRARIES
+  ─────────────────────────────────────────────────────────────────────────
+  spaCy (en_core_web_sm) : Named Entity Recognition — extracts PERSON,
+                            DATE, and TIME entities from transcripts.
+
+  NLTK                   : Sentence tokenization, word tokenization,
+                            stopword removal, POS tagging.
+                            Models: punkt, averaged_perceptron_tagger.
+
+  scikit-learn           : TF-IDF vectorization for summarization,
+                            keyword extraction, and topic segmentation.
+                            Cosine Similarity for topic boundary detection.
+
+  NumPy                  : Mathematical operations — similarity scoring,
+                            threshold computation, array operations.
+
+  ─────────────────────────────────────────────────────────────────────────
+  LARGE LANGUAGE MODEL (LLM) INTEGRATION
+  ─────────────────────────────────────────────────────────────────────────
+  Ollama (local server)  : Runs open-source LLMs locally via REST API.
+                            Zero cloud dependency. Privacy preserved.
+  LLaMA 3.2 (model)      : Powers enhanced summaries, structured JSON
+                            task extraction, risk analysis, email drafts.
+  requests               : HTTP client for communicating with Ollama
+                            REST endpoint at http://localhost:11434
+
+  ─────────────────────────────────────────────────────────────────────────
+  FRONTEND & VISUALIZATION
+  ─────────────────────────────────────────────────────────────────────────
+  Streamlit (>=1.30.0)   : Interactive web dashboard — transcript upload,
+                            analysis results, history, analytics views.
+  Plotly (>=5.18.0)      : Interactive charts — sentiment trends,
+                            contribution pie charts, productivity graphs.
+  Jinja2 (>=3.1.0)       : HTML report templating for export feature.
+
+  ─────────────────────────────────────────────────────────────────────────
+  DATABASE & PERSISTENCE
+  ─────────────────────────────────────────────────────────────────────────
+  SQLite (built-in)      : Persistent storage of all meeting analyses.
+                            File: meeting_knowledge_base.db
+  WAL Mode               : Write-Ahead Logging for thread-safe concurrent
+                            database access in Streamlit multi-thread env.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 6 — ALGORITHMS & TECHNIQUES IMPLEMENTED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Algorithm                     Application in MeetMind
+  ─────────────────────────────────────────────────────────────────────────
+  TF-IDF Extractive Summary   : Multi-level summaries with positional
+                                 weighting (first/last sentences boosted).
+  Cosine Similarity           : Detects topic shift between consecutive
+                                 sentences for topic segmentation.
+  Flesch-Kincaid Readability  : Measures clarity/complexity of transcript.
+  Jaccard Similarity          : Deduplicates extracted action items.
+  Lexicon-based Sentiment     : Per-speaker and overall meeting sentiment
+                                 using curated positive/negative word sets.
+  Regex Pattern Matching      : Decision detection, action item extraction,
+                                 risk flagging, speaker parsing.
+  Composite Productivity Score: Weighted formula combining action density,
+                                 decision ratio, participation balance,
+                                 risk awareness, and clarity score.
+  Named Entity Recognition    : spaCy NER for person/date/time detection
+                                 in task assignment and deadline extraction.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 7 — PROJECT FILE STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  meeting_summarizer/
+  │
+  ├── app.py                  Main Streamlit dashboard (UI + routing)
+  ├── nlp_engine.py           Core NLP pipeline — MeetingAnalyzer class
+  ├── llm_engine.py           Ollama/LLaMA integration — OllamaEngine
+  ├── knowledge_base.py       SQLite database read/write operations
+  ├── analytics.py            Trend analytics and chart data
+  ├── report_generator.py     HTML/PDF export using Jinja2 templates
+  ├── config.py               Centralized config — patterns, thresholds
+  ├── requirements.txt        Python dependencies list
+  │
+  ├── index.html              Standalone HTML frontend interface
+  ├── css/styles.css          UI styling (dark theme, glassmorphism)
+  ├── js/app.js               Frontend application logic
+  ├── js/history.js           Meeting history panel interactions
+  ├── js/visualizations.js    Chart and visualization rendering
+  │
+  ├── meeting_knowledge_base.db   SQLite persistent database
+  └── samples/                    Sample meeting transcripts for testing
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 8 — HOW TO RUN THE PROJECT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Step 1 — Install Python Dependencies
+          pip install -r requirements.txt
+          python -m spacy download en_core_web_sm
+
+  Step 2 — (Optional) Start Ollama for AI-Enhanced Features
+          ollama serve
+          ollama pull llama3.2
+
+  Step 3 — Launch the Streamlit Application
+          streamlit run app.py
+
+  Step 4 — Open in Browser
+          Navigate to: http://localhost:8501
+
+  Step 5 — Use the Application
+          - Paste or upload a meeting transcript
+          - Click "Analyze Meeting"
+          - View Summary, Tasks, Decisions, Risks, Sentiment, Score
+          - Export as HTML report or AI-drafted email
+          - Browse meeting history and analytics dashboard
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 9 — ACADEMIC / SEMESTER PROJECT VALUE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  This project demonstrates strong competency across multiple domains:
+
+  [1] Natural Language Processing
+      Multi-stage NLP pipeline using spaCy, NLTK, TF-IDF, and regex.
+
+  [2] Machine Learning
+      Unsupervised techniques — TF-IDF, cosine similarity, extractive
+      summarization with position and length weighting.
+
+  [3] Large Language Model Integration
+      Local LLM deployment using Ollama. Prompt engineering for structured
+      JSON output, summaries, and email generation.
+
+  [4] Full-Stack Development
+      Python backend + Streamlit dashboard + standalone HTML/JS frontend.
+
+  [5] Database Engineering
+      SQLite with WAL for thread-safe, concurrent multi-session access.
+
+  [6] Software Engineering
+      Modular, configuration-driven architecture. Separation of concerns
+      across NLP engine, LLM engine, knowledge base, and UI layers.
+
+  [7] Data Visualization
+      Interactive Plotly charts for trends, sentiments, contributions,
+      and productivity metrics over time.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  END OF SCRIPT
+  MeetMind — AI Meeting Summarizer | Semester Project 2026
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
