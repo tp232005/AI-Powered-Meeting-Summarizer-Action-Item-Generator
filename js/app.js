@@ -309,6 +309,7 @@ const App = (() => {
     btn('export-md-btn',  () => guard() && Export.exportMarkdown(currentResult, currentTitle));
     btn('export-json-btn',() => guard() && Export.exportJSON(currentResult, currentTitle));
     btn('export-pdf-btn', () => guard() && Export.exportPDF(currentResult, currentTitle));
+    btn('export-ics-btn', () => guard() && Export.exportCalendar(currentResult, currentTitle));
     btn('copy-btn', async () => {
       if (!guard()) return;
       const ok = await Export.copyToClipboard(currentResult, currentTitle);

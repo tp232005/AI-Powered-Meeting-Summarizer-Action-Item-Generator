@@ -1,0 +1,20 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime-generated data
+meeting_knowledge_base.db
+temp/
+
+# Keep the environment template tracked
+!.env.example
+
+# Local model and tool caches
+.cache/
+.streamlit/

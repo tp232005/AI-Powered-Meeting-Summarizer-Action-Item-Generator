@@ -1,0 +1,7 @@
+Hiring Discussion
+
+Mina: We need one more developer for the project.
+David: The main skills are Python, testing, and clear communication.
+Mina: We agreed to publish the job post tomorrow.
+David: I will write the job description today.
+Mina: We will review the first applications next Friday.

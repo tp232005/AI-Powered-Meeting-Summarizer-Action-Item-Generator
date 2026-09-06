@@ -1,0 +1,7 @@
+Software Release Meeting
+
+Daniel: The new version is almost ready.
+Emily: We found one serious login problem during testing.
+Daniel: The release must wait until the login problem is fixed.
+Emily: I will test the fix this afternoon.
+Daniel: We agreed to release the update on Friday if testing passes.

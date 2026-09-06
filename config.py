@@ -1,13 +1,33 @@
 """Configuration for AI Meeting Summarizer"""
 import os
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # ── Ollama LLM Configuration ──
 OLLAMA_BASE_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 OLLAMA_TIMEOUT = 120  # seconds
 
+# ── API Keys ──
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("SPEECH_TO_TEXT_API_KEY")
+LLM_API_KEY = os.getenv("LLM_API_KEY")
+
 # ── Database ──
 DB_PATH = os.path.join(os.path.dirname(__file__), "meeting_knowledge_base.db")
+
+# ── Speech-to-Text (ASR) Configuration ──
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "openai/whisper-tiny.en")
+SPEECH_TO_TEXT_PROVIDER = os.getenv("SPEECH_TO_TEXT_PROVIDER", "openai")
+AUDIO_CHUNK_SECONDS = int(os.getenv("AUDIO_CHUNK_SECONDS", "600"))
+MAX_AUDIO_FILE_SIZE_MB = int(os.getenv("MAX_AUDIO_FILE_SIZE_MB", "25"))
+MAX_AUDIO_FILE_SIZE_BYTES = MAX_AUDIO_FILE_SIZE_MB * 1024 * 1024
+SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".mp4", ".webm", ".ogg", ".flac", ".mov", ".mkv", ".avi"}
+TEMP_DIR = os.path.join(os.path.dirname(__file__), "temp")
+os.makedirs(TEMP_DIR, exist_ok=True)
 
 # ── NLP Parameters ──
 SHORT_SUMMARY_SENTENCES = 3

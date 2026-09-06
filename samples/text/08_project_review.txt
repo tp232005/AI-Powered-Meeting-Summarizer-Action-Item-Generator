@@ -1,0 +1,7 @@
+Project Review Meeting
+
+Nina: The project is moving forward, but the testing is late.
+Arun: We finished the main features last week.
+Nina: The late testing may affect the delivery date.
+Arun: I will add one more tester to the team.
+Nina: We will review the schedule again on Monday.

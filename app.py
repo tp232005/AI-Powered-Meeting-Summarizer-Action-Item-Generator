@@ -1,13 +1,14 @@
 """
 MeetMind — AI Meeting Summarizer
 Premium Streamlit Dashboard with Advanced NLP + LLM Integration
-"""
+"""  
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import json
 import os
+import re
 
 import config
 from nlp_engine import MeetingAnalyzer
@@ -15,10 +16,8 @@ from llm_engine import OllamaEngine
 from knowledge_base import KnowledgeBase
 from report_generator import ReportGenerator
 from analytics import MeetingAnalytics
+from transcription_engine import TranscriptionEngine
 
-# ═══════════════════════════════════════════
-#  PAGE CONFIG
-# ═══════════════════════════════════════════
 
 st.set_page_config(
     page_title=config.STREAMLIT_PAGE_TITLE,
@@ -30,13 +29,13 @@ st.set_page_config(
 # ── Premium CSS Theme ──
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 
     /* ── Global ── */
     .stApp {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-        background: linear-gradient(135deg, #0a0a1a 0%, #0f0c29 25%, #1a1145 50%, #0d0b21 100%);
-        color: #e2e8f0;
+        font-family: 'DM Sans', sans-serif;
+        background: #08111d;
+        color: #edf4f1;
     }
 
     /* ── Hide Streamlit header/decoration bar ── */
@@ -54,29 +53,77 @@ st.markdown("""
         background: transparent !important;
     }
 
+    /* ── Product surface refresh ── */
+    :root {
+        --canvas: #08111d;
+        --panel: #101d2b;
+        --panel-soft: #142536;
+        --line: rgba(198, 220, 215, 0.13);
+        --muted: #9aafb0;
+        --ink: #edf4f1;
+        --mint: #69e0bd;
+        --coral: #ff8b75;
+        --blue: #7bb8ff;
+    }
+    .stApp:before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(circle at 88% 4%, rgba(105, 224, 189, 0.09), transparent 28%),
+                    radial-gradient(circle at 12% 90%, rgba(123, 184, 255, 0.08), transparent 30%);
+    }
+    .main .block-container {
+        max-width: 1440px;
+        padding: 2.2rem clamp(1rem, 4vw, 4rem) 4rem;
+    }
+    .stApp p, .stApp li, .stApp span, .stApp div { color: var(--ink); }
+    .stCaption, [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
+    h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif !important; letter-spacing: -0.02em; }
+    .top-shell {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0 0 1.6rem;
+        margin-bottom: 1.4rem;
+        border-bottom: 1px solid var(--line);
+    }
+    .breadcrumb { color: var(--muted); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em; }
+    .breadcrumb span { color: var(--mint); padding: 0 0.35rem; }
+    .shell-title { color: var(--ink); font-family: 'Space Grotesk', sans-serif; font-size: 1.05rem; font-weight: 600; margin-top: 0.35rem; }
+    .shell-actions { display: flex; align-items: center; gap: 0.55rem; color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+    .engine-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px rgba(105,224,189,0.1), 0 0 14px rgba(105,224,189,0.65); }
+    .shell-avatar { display: grid; place-items: center; width: 30px; height: 30px; margin-left: 0.7rem; border: 1px solid rgba(123,184,255,0.35); border-radius: 50%; background: rgba(123,184,255,0.15); color: #c7ddff !important; font-size: 0.68rem; font-weight: 700; }
+    .eyebrow { color: var(--mint) !important; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.14em; margin-bottom: 0.9rem; }
+    .nav-group-label { color: #6e858b !important; font-size: 0.64rem; font-weight: 700; letter-spacing: 0.13em; margin: 1rem 0 0.5rem; padding-left: 0.2rem; }
+
     /* ── Sidebar ── */
     section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0c0a1e 0%, #15112b 50%, #1a1333 100%) !important;
-        border-right: 1px solid rgba(124,58,237,0.15);
+        background: #0b1724 !important;
+        border-right: 1px solid var(--line);
+        width: 288px !important;
+        min-width: 288px !important;
+        max-width: 288px !important;
     }
     section[data-testid="stSidebar"] .stMarkdown { color: #c4b5fd; }
     section[data-testid="stSidebar"] .stRadio label {
         color: #c4b5fd !important;
         font-weight: 500;
     }
+    section[data-testid="stSidebar"] .stRadio > div > label { border: 1px solid transparent; border-radius: 10px; padding: 0.22rem 0.35rem; transition: background 0.2s ease, border-color 0.2s ease; }
+    section[data-testid="stSidebar"] .stRadio > div > label:hover { background: rgba(105,224,189,0.06); border-color: rgba(105,224,189,0.16); }
 
     /* ── Hero Header ── */
     .hero-header {
-        font-size: 3rem;
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: clamp(2.2rem, 5vw, 4.5rem);
         font-weight: 900;
-        background: linear-gradient(135deg, #a78bfa, #7c3aed, #38bdf8, #34d399);
-        background-size: 300% 300%;
-        animation: gradient-shift 6s ease infinite;
+        color: #edf4f1;
         -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
         line-height: 1.1;
-        margin-bottom: 4px;
-        letter-spacing: -1px;
+        margin: 0 0 10px;
+        letter-spacing: -2px;
     }
     @keyframes gradient-shift {
         0%, 100% { background-position: 0% 50%; }
@@ -84,26 +131,25 @@ st.markdown("""
     }
 
     .hero-sub {
-        color: #94a3b8;
-        font-size: 1.15rem;
+        color: var(--muted);
+        font-size: 1.05rem;
         font-weight: 400;
-        margin-bottom: 1.5rem;
+        max-width: 780px;
+        margin-bottom: 1.8rem;
         line-height: 1.6;
     }
 
     /* ── Glass Cards ── */
     .glass-card {
-        background: rgba(15, 12, 41, 0.6);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(124, 58, 237, 0.2);
-        border-radius: 20px;
-        padding: 28px;
+        background: rgba(16, 29, 43, 0.92);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: clamp(18px, 3vw, 30px);
         margin-bottom: 20px;
-        transition: all 0.3s ease;
+        box-shadow: 0 16px 45px rgba(0, 0, 0, 0.16);
     }
     .glass-card:hover {
-        border-color: rgba(124, 58, 237, 0.4);
-        box-shadow: 0 8px 40px rgba(124, 58, 237, 0.1);
+        border-color: rgba(105, 224, 189, 0.32);
     }
 
     /* ── Metric Cards ── */
@@ -114,24 +160,25 @@ st.markdown("""
         margin: 20px 0;
     }
     .metric-card {
-        background: rgba(15, 12, 41, 0.7);
-        border: 1px solid rgba(124, 58, 237, 0.15);
-        border-radius: 16px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
         padding: 20px;
         text-align: center;
         transition: all 0.3s ease;
     }
     .metric-card:hover {
-        border-color: rgba(124, 58, 237, 0.4);
+        border-color: rgba(105, 224, 189, 0.38);
         transform: translateY(-2px);
         box-shadow: 0 8px 30px rgba(124, 58, 237, 0.12);
     }
     .metric-card .value {
         font-size: 1.8rem;
         font-weight: 800;
-        background: linear-gradient(135deg, #a78bfa, #38bdf8);
+        color: var(--mint);
+        background: none;
         -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        -webkit-text-fill-color: var(--mint);
     }
     .metric-card .label {
         font-size: 0.78rem;
@@ -149,9 +196,9 @@ st.markdown("""
     /* ── Feature Pills ── */
     .pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 24px; }
     .pill {
-        background: rgba(124, 58, 237, 0.12);
-        border: 1px solid rgba(124, 58, 237, 0.25);
-        color: #c4b5fd;
+        background: rgba(105, 224, 189, 0.08);
+        border: 1px solid rgba(105, 224, 189, 0.2);
+        color: #a8e8d4;
         padding: 6px 14px;
         border-radius: 20px;
         font-size: 0.82rem;
@@ -164,7 +211,7 @@ st.markdown("""
     .section-header {
         font-size: 1.4rem;
         font-weight: 700;
-        color: #e2e8f0;
+        color: var(--ink);
         margin-bottom: 16px;
         display: flex;
         align-items: center;
@@ -288,8 +335,9 @@ st.markdown("""
     }
     .logo-icon {
         width: 42px; height: 42px;
-        background: linear-gradient(135deg, #7c3aed, #4f46e5);
-        border-radius: 12px;
+        background: var(--mint);
+        color: #092019;
+        border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -313,9 +361,9 @@ st.markdown("""
 
     /* ── Version Badge ── */
     .version-badge {
-        background: rgba(124, 58, 237, 0.1);
-        border: 1px solid rgba(124, 58, 237, 0.2);
-        color: #a78bfa;
+        background: rgba(105, 224, 189, 0.08);
+        border: 1px solid rgba(105, 224, 189, 0.2);
+        color: #a8e8d4;
         padding: 6px 14px;
         border-radius: 10px;
         font-size: 0.75rem;
@@ -326,11 +374,26 @@ st.markdown("""
 
     /* ── Plotly Chart Containers ── */
     .chart-container {
-        background: rgba(15, 12, 41, 0.5);
-        border: 1px solid rgba(124, 58, 237, 0.12);
-        border-radius: 16px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
         padding: 16px;
         margin-bottom: 16px;
+    }
+
+    @media (max-width: 760px) {
+        section[data-testid="stSidebar"] {
+            width: min(86vw, 288px) !important;
+            min-width: min(86vw, 288px) !important;
+            max-width: min(86vw, 288px) !important;
+        }
+        .main .block-container { padding: 1.4rem 1rem 3rem; }
+        .hero-header { font-size: 2.35rem; letter-spacing: -1px; }
+        .pill-row { gap: 6px; }
+        .pill { font-size: 0.74rem; padding: 5px 9px; }
+        .top-shell { align-items: flex-start; }
+        .shell-actions { font-size: 0; }
+        .shell-actions .engine-dot { font-size: initial; }
     }
 
     /* ── Keyword Tags ── */
@@ -559,6 +622,63 @@ st.markdown("""
         color: #e2e8f0 !important;
         font-size: 0.95rem !important;
     }
+
+    /* ── Calm product theme ── */
+    .stApp { background: #0b1118; font-family: 'DM Sans', sans-serif; }
+    .stApp:before { display: none; }
+    .main .block-container { max-width: 1180px; padding: 1.5rem 2.5rem 3.5rem; }
+    .top-shell { padding: 0 0 1rem; margin-bottom: 1.8rem; border-bottom: 1px solid #263342; }
+    .breadcrumb { color: #7f8b98; font-size: 0.72rem; letter-spacing: 0.02em; text-transform: none; }
+    .breadcrumb span { color: #7f8b98; padding: 0 0.3rem; }
+    .shell-title { color: #f3f4f6; font-size: 1rem; font-weight: 600; }
+    .shell-actions { color: #9ca3af; }
+    .engine-dot { width: 7px; height: 7px; background: #6f9f87; box-shadow: none; }
+    .shell-avatar { display: none; }
+    .eyebrow, .nav-group-label { color: #9ca3af !important; font-size: 0.72rem; letter-spacing: 0.03em; }
+    .page-heading { color: #f3f4f6; font-family: 'DM Sans', sans-serif; font-size: 2rem; font-weight: 600; margin: 0 0 0.35rem; }
+    .page-description { color: #9ca3af !important; font-size: 1rem; margin-bottom: 1.5rem; }
+    .hero-header { color: #f3f4f6; font-family: 'DM Sans', sans-serif; font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; }
+    .hero-sub { color: #9ca3af; font-size: 1rem; max-width: 680px; }
+    section[data-testid="stSidebar"] { background: #111a24 !important; border-right: 1px solid #263342; width: 230px !important; min-width: 230px !important; max-width: 230px !important; }
+    .logo-container { padding: 0.8rem 0.2rem 1.2rem; margin-bottom: 1rem; border-bottom: 1px solid #263342; }
+    .logo-icon { width: 30px; height: 30px; background: #7c5cfc; border-radius: 7px; font-size: 0; }
+    .logo-icon:after { content: 'M'; color: #fff; font-size: 0.9rem; font-weight: 700; }
+    .logo-text .name { font-size: 1rem; }
+    .logo-text .sub { color: #9ca3af; font-size: 0.7rem; letter-spacing: 0; text-transform: none; }
+    section[data-testid="stSidebar"] .stRadio > div > label { border-radius: 7px; padding: 0.12rem 0.25rem; }
+    section[data-testid="stSidebar"] .stRadio > div > label:hover { background: #1a2633; border-color: transparent; }
+    section[data-testid="stSidebar"] .stRadio label, .stRadio > div > label > div > p { color: #c9d1d9 !important; font-size: 0.9rem !important; font-weight: 500 !important; }
+    .glass-card, .metric-card, .task-card, .participant-card, .history-card, .chart-container { background: #111a24; border: 1px solid #263342; border-radius: 8px; box-shadow: none; }
+    .glass-card { padding: 1.25rem; }
+    .glass-card:hover, .metric-card:hover, .history-card:hover { border-color: #3a4b5d; box-shadow: none; transform: none; }
+    .metric-row { gap: 10px; margin: 1.25rem 0; }
+    .metric-card { padding: 1rem; text-align: left; }
+    .metric-card .value { color: #f3f4f6; font-size: 1.45rem; -webkit-text-fill-color: #f3f4f6; }
+    .metric-card .label { color: #9ca3af; font-size: 0.82rem; text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .pill-row { display: none; }
+    .section-header { color: #f3f4f6; font-size: 1.15rem; margin: 1.5rem 0 0.75rem; }
+    .section-header .icon { display: none; }
+    .decision-card, .risk-card { background: #141f2b; border-left: 2px solid #7c5cfc; border-radius: 4px; padding: 0.8rem 1rem; }
+    .task-card { padding: 0.8rem 1rem; margin-bottom: 0.5rem; }
+    .task-card .task-text { color: #f3f4f6; margin-bottom: 0.35rem; }
+    .task-card .task-meta span { color: #9ca3af; }
+    .stTextArea textarea, .stTextInput input { background: #0f1720 !important; border: 1px solid #334252 !important; border-radius: 6px !important; color: #f3f4f6 !important; }
+    .stTextArea textarea:focus, .stTextInput input:focus { border-color: #7c5cfc !important; box-shadow: 0 0 0 1px #7c5cfc !important; }
+    .stSelectbox > div > div { background: #0f1720 !important; border: 1px solid #334252 !important; border-radius: 6px !important; }
+    button[data-testid="stBaseButton-primary"] { background: #7c5cfc !important; border-radius: 6px !important; box-shadow: none !important; padding: 0.55rem 1rem !important; }
+    button[data-testid="stBaseButton-primary"]:hover { background: #6d4ee8 !important; transform: none; }
+    button[data-testid="stBaseButton-secondary"], .stDownloadButton button { background: #17222e !important; border: 1px solid #334252 !important; border-radius: 6px !important; color: #d7dee7 !important; }
+    button[data-testid="stBaseButton-secondary"]:hover, .stDownloadButton button:hover { background: #202e3c !important; }
+    .stTabs [data-baseweb="tab-list"] { background: transparent; border-bottom: 1px solid #263342; border-radius: 0; padding: 0; gap: 1.2rem; }
+    .stTabs [data-baseweb="tab"] { border-radius: 0 !important; padding: 0.65rem 0.1rem; color: #9ca3af !important; }
+    .stTabs [aria-selected="true"] { background: transparent !important; color: #f3f4f6 !important; border-bottom: 2px solid #7c5cfc; }
+    .stExpander { background: #111a24 !important; border: 1px solid #263342 !important; border-radius: 8px !important; }
+    .stDivider { border-color: #263342 !important; }
+    div[data-testid="stMetric"] { background: #111a24; border: 1px solid #263342; border-radius: 8px; }
+    div[data-testid="stMetricLabel"] { color: #9ca3af !important; }
+    .stProgress > div > div > div { background: #7c5cfc !important; }
+    .stCaption, [data-testid="stCaptionContainer"] { color: #9ca3af !important; }
+    @media (max-width: 760px) { .main .block-container { padding: 1rem 1rem 2.5rem; } .top-shell { margin-bottom: 1.2rem; } .shell-actions { display: none; } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -579,9 +699,14 @@ def get_kb():
 def get_llm():
     return OllamaEngine()
 
+@st.cache_resource
+def get_transcriber():
+    return TranscriptionEngine()
+
 analyzer = get_analyzer()
 kb = get_kb()
 llm = get_llm()
+transcriber = get_transcriber()
 report_gen = ReportGenerator()
 analytics_engine = MeetingAnalytics(kb)
 
@@ -594,6 +719,176 @@ PLOTLY_LAYOUT = dict(
     xaxis=dict(gridcolor="rgba(124,58,237,0.08)", zerolinecolor="rgba(124,58,237,0.08)"),
     yaxis=dict(gridcolor="rgba(124,58,237,0.08)", zerolinecolor="rgba(124,58,237,0.08)"),
 )
+
+
+def safe_read_uploaded_audio(uploaded_file):
+    """Validate and persist uploaded audio to a temp file for processing."""
+    if uploaded_file is None:
+        return None
+
+    ext = os.path.splitext(uploaded_file.name)[1].lower()
+    if ext not in config.SUPPORTED_AUDIO_EXTENSIONS:
+        raise ValueError("Unsupported audio format. Please upload MP3, WAV, M4A, MP4, or WEBM.")
+
+    try:
+        file_size = uploaded_file.size
+        max_size = config.MAX_AUDIO_FILE_SIZE_BYTES
+        if file_size <= 0:
+            raise ValueError("The uploaded audio file is empty or corrupted.")
+        if file_size > max_size:
+            raise ValueError(f"Audio file is too large ({file_size / (1024 * 1024):.1f} MB). Keep it under {config.MAX_AUDIO_FILE_SIZE_MB} MB.")
+    except Exception:
+        raise
+
+    temp_dir = config.TEMP_DIR
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_path = os.path.join(temp_dir, f"upload_{uuid.uuid4().hex}{ext}")
+    with open(temp_path, "wb") as temp_file:
+        temp_file.write(uploaded_file.getvalue())
+    return temp_path
+
+
+def retrieve_memory_matches(query: str, limit: int = 5) -> list:
+    """Rank saved meetings by overlap with the user's question."""
+    terms = set(re.findall(r"[a-z0-9]{3,}", query.lower()))
+    matches = []
+    for meeting in kb.list_meetings(limit=100):
+        full = kb.get(meeting["id"])
+        if not full:
+            continue
+        analysis = full.get("analysis", {})
+        tasks = analysis.get("tasks", [])
+        decisions = analysis.get("decisions", [])
+        searchable = " ".join([
+            full.get("title", ""), full.get("transcript", ""),
+            full.get("short_summary", ""), full.get("detailed_summary", ""),
+            " ".join(task.get("task", "") for task in tasks),
+            " ".join(decisions),
+        ]).lower()
+        score = sum(searchable.count(term) for term in terms)
+        if score:
+            matches.append((score, full))
+    matches.sort(key=lambda item: (item[0], item[1].get("date", "")), reverse=True)
+    return [meeting for _, meeting in matches[:limit]]
+
+
+def answer_memory_question(query: str, meetings: list) -> str:
+    """Answer from retrieved meetings, with a deterministic offline fallback."""
+    evidence = []
+    for meeting in meetings:
+        analysis = meeting.get("analysis", {})
+        tasks = analysis.get("tasks", [])
+        decisions = analysis.get("decisions", [])
+        evidence.append(
+            f"Meeting: {meeting.get('title', 'Untitled')} ({str(meeting.get('date', ''))[:10]})\n"
+            f"Summary: {analysis.get('short_summary', meeting.get('short_summary', ''))}\n"
+            f"Decisions: {'; '.join(decisions[:6]) or 'None detected'}\n"
+            f"Action items: {'; '.join(task.get('task', '') for task in tasks[:6]) or 'None detected'}"
+        )
+    context = "\n\n".join(evidence)
+    if ollama_ok:
+        prompt = (
+            "Answer the user's question using only the meeting records below. "
+            "Cite meeting titles and dates in your answer. If the records do not contain "
+            "the answer, say that clearly instead of guessing.\n\n"
+            f"User question: {query}\n\nMeeting records:\n{context}"
+        )
+        response = llm._generate(prompt, "You are MeetMind's meeting memory assistant. Be precise and concise.")
+        if response:
+            return response
+    return "No matching saved meeting contains enough information to answer that question.\n\n" + context
+
+
+def get_accountability_tasks() -> list:
+    """Flatten saved meeting tasks into tracker-friendly records."""
+    records = []
+    for meeting in kb.list_meetings(limit=100):
+        full = kb.get(meeting["id"])
+        if not full:
+            continue
+        for index, task in enumerate(full.get("analysis", {}).get("tasks", [])):
+            deadline = str(task.get("deadline", "Not specified"))
+            due_date = None
+            if deadline.lower() not in {"not specified", "unknown", "none", ""}:
+                due_date = ReportGenerator._parse_calendar_date(deadline, datetime.now()).date()
+            records.append({
+                "meeting_id": full["id"], "task_index": index,
+                "meeting": full.get("title", "Untitled"), "task": task.get("task", ""),
+                "assignee": task.get("assignee", "Team"), "deadline": deadline,
+                "due_date": due_date, "priority": task.get("priority", "low"),
+                "status": task.get("status", "pending"),
+            })
+    return records
+
+
+def quality_recommendations(analysis: dict) -> list:
+    """Generate explainable coaching advice from meeting measurements."""
+    advice = []
+    score = analysis.get("productivity_score", {})
+    breakdown = score.get("breakdown", {})
+    tasks = analysis.get("tasks", [])
+    decisions = analysis.get("decisions", [])
+    participants = analysis.get("participants", [])
+    if not tasks:
+        advice.append(("Follow-up gap", "No action items were detected. End the next meeting with an owner and deadline for every commitment."))
+    elif sum(1 for task in tasks if task.get("deadline", "Not specified") in {"Not specified", "Unknown"}) > 0:
+        advice.append(("Deadline clarity", "Some tasks have no deadline. Add a date before closing the meeting so the tracker can flag risk."))
+    if not decisions:
+        advice.append(("Decision clarity", "No firm decisions were detected. Use an explicit decision statement and record the decision owner."))
+    if breakdown.get("participation_balance", 25) < 15:
+        advice.append(("Participation balance", "One or more speakers dominated the discussion. Add a round-robin check-in or invite quieter participants directly."))
+    if breakdown.get("clarity", 10) < 6:
+        advice.append(("Communication clarity", "The transcript is difficult to follow. Use a short agenda, topic transitions, and a recap before moving on."))
+    if analysis.get("risks") and not tasks:
+        advice.append(("Risk ownership", "Risks were raised without follow-up tasks. Assign a mitigation owner and review date for each risk."))
+    if score.get("total", 100) >= 80 and not advice:
+        advice.append(("Keep the pattern", "This meeting has strong structure. Reuse its agenda and close with the same decision and action-item recap."))
+    return advice
+
+
+def get_governance_summary() -> dict:
+    """Summarize follow-up and decision coverage across saved meetings."""
+    meetings = kb.list_meetings(limit=100)
+    needs_review = []
+    meetings_with_tasks = 0
+    meetings_with_decisions = 0
+
+    for meeting in meetings:
+        full = kb.get(meeting["id"])
+        analysis = full.get("analysis", {}) if full else {}
+        tasks = analysis.get("tasks", [])
+        decisions = analysis.get("decisions", [])
+        if tasks:
+            meetings_with_tasks += 1
+        if decisions:
+            meetings_with_decisions += 1
+        if not tasks or not decisions:
+            needs_review.append({
+                "title": meeting.get("title", "Untitled"),
+                "date": str(meeting.get("date", ""))[:10],
+                "reason": "No action items" if not tasks else "No decisions recorded",
+            })
+
+    tasks = get_accountability_tasks()
+    today = datetime.now().date()
+    open_tasks = [task for task in tasks if task["status"] != "done"]
+    overdue_tasks = [
+        task for task in open_tasks
+        if task["due_date"] and task["due_date"] < today
+    ]
+    total = len(meetings)
+    return {
+        "total_meetings": total,
+        "follow_up_rate": round(meetings_with_tasks / total * 100) if total else 0,
+        "decision_rate": round(meetings_with_decisions / total * 100) if total else 0,
+        "open_tasks": len(open_tasks),
+        "overdue_tasks": len(overdue_tasks),
+        "needs_review": needs_review[:8],
+    }
+
+
+# Need this at module scope for temp upload helper.
+import uuid
 
 COLORS = ["#a78bfa", "#38bdf8", "#34d399", "#fbbf24", "#f472b6", "#fb923c", "#818cf8", "#2dd4bf"]
 
@@ -608,32 +903,67 @@ with st.sidebar:
         <div class="logo-icon">🧠</div>
         <div class="logo-text">
             <div class="name">MeetMind</div>
-            <div class="sub">AI Summarizer</div>
+            <div class="sub">Meeting Assistant</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    page = st.radio(
+    st.markdown('<div class="nav-group-label">WORKSPACE</div>', unsafe_allow_html=True)
+    navigation_labels = {
+        "Analyze Meeting": "🏠 Analyze Meeting",
+        "Meetings": "📅 Meetings",
+        "Knowledge Base": "📚 Knowledge Base",
+        "Dashboard": "📊 Results Dashboard",
+        "Analytics": "📈 Analytics",
+        "Memory Assistant": "🧠 Memory Assistant",
+        "Quality Coach": "🎯 Quality Coach",
+        "Action Items": "✅ Accountability Center",
+        "Reports": "📧 Generate Report",
+        "Settings": "⚙️ Settings",
+    }
+    selected_navigation = st.radio(
         "Navigation",
-        ["🏠 Analyze Meeting", "📊 Results Dashboard", "📚 Knowledge Base",
-         "📈 Analytics", "📧 Generate Report", "⚙️ Settings"],
+        ["Analyze Meeting", "Meetings", "Knowledge Base", "Dashboard", "Analytics",
+         "Memory Assistant", "Quality Coach", "Action Items", "Reports", "Settings"],
         label_visibility="collapsed",
     )
+    page = navigation_labels[selected_navigation]
 
+    st.markdown('<div class="nav-group-label">TOOLS & OUTPUT</div>', unsafe_allow_html=True)
     st.divider()
 
     # Ollama status
     ollama_ok = llm.is_available()
-    if ollama_ok:
-        st.markdown(f"✅ **Ollama**: `{config.OLLAMA_MODEL}`")
-    else:
-        st.markdown("⚠️ **Ollama**: Offline")
-        st.caption("Using rule-based NLP engine")
-
     meeting_count = len(kb.list_meetings())
-    st.markdown(f"📂 **{meeting_count}** meetings stored")
+    st.caption(f"{meeting_count} meetings")
 
-    st.markdown('<div class="version-badge">v3.0 · Research Edition</div>', unsafe_allow_html=True)
+
+# ── Product shell ──
+page_titles = {
+    "🏠 Analyze Meeting": ("Analyze Meeting", "Workspace / New analysis"),
+    "📅 Meetings": ("Meetings", "Workspace / History"),
+    "📊 Results Dashboard": ("Meeting results", "Workspace / Results"),
+    "📚 Knowledge Base": ("Knowledge Base", "Workspace / Archive"),
+    "📈 Analytics": ("Analytics", "Insights / Trends"),
+    "🧠 Memory Assistant": ("Memory Assistant", "AI tools / Recall"),
+    "✅ Accountability Center": ("Accountability Center", "Output / Action items"),
+    "🎯 Quality Coach": ("Quality Coach", "AI tools / Coaching"),
+    "📧 Generate Report": ("Generate Report", "Output / Export"),
+    "⚙️ Settings": ("Settings", "System / Preferences"),
+}
+shell_title, shell_breadcrumb = page_titles.get(page, ("MeetMind", "Workspace"))
+st.markdown(f"""
+<div class="top-shell">
+    <div>
+        <div class="breadcrumb">MEETMIND <span>/</span> {shell_breadcrumb.upper()}</div>
+        <div class="shell-title">{shell_title}</div>
+    </div>
+    <div class="shell-actions">
+        <span class="engine-dot"></span><span>Ready</span>
+        <span class="shell-avatar">DM</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════
@@ -655,37 +985,100 @@ def render_metric_row(metrics):
 # ═══════════════════════════════════════════
 
 if page == "🏠 Analyze Meeting":
-    st.markdown('<h1 class="hero-header">Turn Meetings Into<br>Actionable Intelligence</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">Advanced NLP engine with TF-IDF summarization, smart task extraction, risk detection, topic segmentation, and productivity scoring — powered by spaCy, NLTK & optional Ollama LLM.</p>', unsafe_allow_html=True)
+    st.markdown('<h1 class="page-heading">Analyze a meeting</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="page-description">Upload a recording or paste a transcript to get a summary and action items.</p>', unsafe_allow_html=True)
 
-    # Feature pills
-    pills = ["Multi-Level Summaries", "Decision Detection", "Smart Task Extraction",
-             "Risk Analysis", "Topic Segmentation", "Participant Analysis",
-             "Productivity Score", "LLM Enhancement", "Knowledge Base", "Auto Reports"]
-    pills_html = "".join(f'<span class="pill">✦ {p}</span>' for p in pills)
-    st.markdown(f'<div class="pill-row">{pills_html}</div>', unsafe_allow_html=True)
+    meeting_templates = {
+        "Project review": (
+            "Project Review Meeting",
+            "Meeting: Project Review\nDate:\nAttendees:\n\nProgress since the last meeting:\n\nProblems or risks:\n\nDecisions made:\n\nAction items, owners, and deadlines:\n",
+        ),
+        "Class committee": (
+            "Class Committee Meeting",
+            "Meeting: Class Committee\nDate:\nStudents and staff present:\n\nTopics discussed:\n\nStudent concerns:\n\nDecisions made:\n\nAction items, owners, and deadlines:\n",
+        ),
+        "Team stand-up": (
+            "Team Stand-up",
+            "Meeting: Team Stand-up\nDate:\nTeam members:\n\nCompleted since the last meeting:\n\nPlanned work:\n\nBlockers:\n\nAction items, owners, and deadlines:\n",
+        ),
+        "Event planning": (
+            "Event Planning Meeting",
+            "Meeting: Event Planning\nDate:\nOrganizers present:\n\nEvent goal and date:\n\nTasks to complete:\n\nBudget or venue concerns:\n\nDecisions made:\n\nAction items, owners, and deadlines:\n",
+        ),
+    }
+    with st.expander("Start from a meeting template", expanded=False):
+        template_name = st.selectbox("Template", list(meeting_templates.keys()))
+        st.caption("Templates give teams and college committees a consistent structure before they analyze notes.")
+        if st.button("Use template", key="use_meeting_template", type="secondary"):
+            template_title, template_text = meeting_templates[template_name]
+            st.session_state["_sample_title"] = template_title
+            st.session_state["_sample_text"] = template_text
+            st.rerun()
 
     # Input card
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
     col1, col2 = st.columns([3, 1])
     with col1:
         default_title = st.session_state.get("_sample_title", "")
-        meeting_title = st.text_input("📝 Meeting Title", value=default_title, placeholder="e.g., Q1 2025 Product Strategy Meeting", label_visibility="visible")
+        meeting_title = st.text_input("Meeting title", value=default_title, placeholder="e.g., Product Strategy Meeting", label_visibility="visible")
     with col2:
         summary_len = st.slider("Summary length", 2, 12, 5)
 
+    # 🎙️ Audio Input flow
+    st.markdown("<div class='section-header'>Audio recording</div>", unsafe_allow_html=True)
+    uploaded_file = st.file_uploader(
+        "Upload meeting recording",
+        type=["mp3", "wav", "m4a", "flac", "mp4", "mkv", "avi", "mov", "webm", "ogg"],
+        help="Upload audio or video to transcribe to text before running the meeting summary pipeline."
+    )
+
+    if uploaded_file is not None:
+        col_u1, col_u2 = st.columns([3, 1])
+        with col_u1:
+            st.info(f"📁 **File Uploaded**: `{uploaded_file.name}` ({uploaded_file.size / (1024*1024):.2f} MB)")
+        with col_u2:
+            if st.button("Transcribe", type="secondary", use_container_width=True):
+                try:
+                    temp_file_path = safe_read_uploaded_audio(uploaded_file)
+                    if temp_file_path is None:
+                        st.error("❌ No audio file was uploaded.")
+                    else:
+                        status = st.status("Uploading audio...\nTranscribing audio...\nGenerating summary...", expanded=True)
+                        try:
+                            with st.spinner("🧠 Converting audio to text and preparing the transcript..."):
+                                transcribed_text = transcriber.transcribe_file(temp_file_path)
+                            status.update(label="Completed", state="complete")
+                            st.session_state["_sample_text"] = transcribed_text
+                            st.session_state["_sample_title"] = os.path.splitext(uploaded_file.name)[0]
+                            st.success("🎉 Transcription complete! The transcript has been loaded into the text area and is ready for analysis.")
+                            st.rerun()
+                        except Exception as exc:
+                            status.update(label="Failed", state="error")
+                            st.error(f"❌ Audio processing failed: {exc}")
+                        finally:
+                            if os.path.exists(temp_file_path):
+                                try:
+                                    os.remove(temp_file_path)
+                                except Exception:
+                                    pass
+                except ValueError as exc:
+                    st.error(f"❌ {exc}")
+                except Exception as exc:
+                    st.error(f"❌ Audio could not be processed. Please try another recording or check the file.")
+                    st.caption(str(exc))
+
     default_text = st.session_state.get("_sample_text", "")
     transcript = st.text_area(
-        "📄 Meeting Transcript",
+        "Paste transcript",
         value=default_text,
         height=280,
-        placeholder="Paste your meeting transcript here...\n\nSupports speaker diarization:\n  Sarah: Good morning everyone...\n  James: Let's start with the agenda...\n  [Speaker Name] text also works\n\nOr paste unformatted meeting minutes.",
+        placeholder="Paste your meeting transcript here or use the file uploader above to transcribe a meeting recording...\n\nSupports speaker diarization:\n  Sarah: Good morning everyone...\n  James: Let's start with the agenda...\n  [Speaker Name] text also works\n\nOr paste unformatted meeting minutes.",
     )
 
     col_s, col_l, col_a = st.columns([1, 1, 2])
     with col_s:
-        if st.button("📋 Load Sample", use_container_width=True, type="secondary"):
-            sample_path = os.path.join(os.path.dirname(__file__), "samples", "sample_meeting.txt")
+        if st.button("Load sample", use_container_width=True, type="secondary"):
+            sample_path = os.path.join(os.path.dirname(__file__), "samples", "text", "sample_meeting.txt")
             if os.path.exists(sample_path):
                 with open(sample_path, "r", encoding="utf-8") as f:
                     st.session_state["_sample_text"] = f.read()
@@ -693,10 +1086,10 @@ if page == "🏠 Analyze Meeting":
                 st.rerun()
 
     with col_l:
-        use_llm = st.checkbox("🤖 Use LLM", value=False)
+        use_llm = st.checkbox("Use language model", value=False)
 
     with col_a:
-        analyze_clicked = st.button("🔍  Analyze Meeting", type="primary", use_container_width=True)
+        analyze_clicked = st.button("Analyze meeting", type="primary", use_container_width=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -731,7 +1124,6 @@ if page == "🏠 Analyze Meeting":
             kb.save(title, transcript, result)
 
             progress.progress(100, text="✅ Complete!")
-            st.balloons()
             st.success(f"✅ Analysis complete — **{title}** saved to Knowledge Base! Navigate to **Results Dashboard** to see the full analysis.", icon="🎉")
 
     elif analyze_clicked:
@@ -755,7 +1147,8 @@ elif page == "📊 Results Dashboard":
         """, unsafe_allow_html=True)
     else:
         st.markdown(f'<h1 class="hero-header">{title}</h1>', unsafe_allow_html=True)
-        st.markdown('<p class="hero-sub">AI-powered meeting intelligence dashboard</p>', unsafe_allow_html=True)
+        st.markdown('<p class="hero-sub">Summary, decisions, action items, and risks from this meeting.</p>', unsafe_allow_html=True)
+        st.caption("Use this page to understand what was discussed and what needs to happen next.")
 
         # Stats bar
         stats = result.get("stats", {})
@@ -773,7 +1166,7 @@ elif page == "📊 Results Dashboard":
 
         # ── Multi-Level Summaries ──
         st.markdown('<div class="section-header"><span class="icon">📝</span> Meeting Summaries</div>', unsafe_allow_html=True)
-        sum_tabs = st.tabs(["✨ Short", "📄 Detailed", "📌 Bullet Points", "🤖 LLM Summary"])
+        sum_tabs = st.tabs(["Summary", "Detailed", "Key points", "Enhanced summary"])
         with sum_tabs[0]:
             st.markdown(f'<div class="glass-card">{result.get("short_summary", "N/A")}</div>', unsafe_allow_html=True)
         with sum_tabs[1]:
@@ -845,6 +1238,7 @@ elif page == "📊 Results Dashboard":
         col_topics, col_sentiment = st.columns(2)
         with col_topics:
             st.markdown('<div class="section-header"><span class="icon">🗂️</span> Discussion Topics</div>', unsafe_allow_html=True)
+            st.caption("Longer bars mean the topic occupied more sentences in the transcript.")
             topics = result.get("topics", [])
             if topics:
                 fig = px.bar(
@@ -860,6 +1254,7 @@ elif page == "📊 Results Dashboard":
 
         with col_sentiment:
             st.markdown('<div class="section-header"><span class="icon">💭</span> Speaker Sentiment</div>', unsafe_allow_html=True)
+            st.caption("This compares positive and negative language by speaker. It is a signal, not a final judgment.")
             speaker_sents = result.get("speaker_sentiments", {})
             if speaker_sents:
                 fig = go.Figure()
@@ -878,6 +1273,7 @@ elif page == "📊 Results Dashboard":
 
         # ── Participants ──
         st.markdown('<div class="section-header"><span class="icon">👥</span> Participant Contributions</div>', unsafe_allow_html=True)
+        st.caption("The chart shows each speaker's share of the words detected in the meeting.")
         participants = result.get("participants", [])
         if participants:
             col_pie, col_cards = st.columns([1, 1])
@@ -914,6 +1310,7 @@ elif page == "📊 Results Dashboard":
 
         # ── Productivity Score ──
         st.markdown('<div class="section-header"><span class="icon">🎯</span> Meeting Productivity Score</div>', unsafe_allow_html=True)
+        st.caption("Higher scores indicate more decisions, clearer follow-up, balanced participation, and fewer unresolved risks.")
         ps = result.get("productivity_score", {})
         breakdown = ps.get("breakdown", {})
 
@@ -969,26 +1366,68 @@ elif page == "📊 Results Dashboard":
 
 
 # ═══════════════════════════════════════════
+#  PAGE: MEETINGS
+# ═══════════════════════════════════════════
+
+elif page == "📅 Meetings":
+    st.markdown('<h1 class="hero-header">Meetings</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">Your complete meeting history. Open a meeting to review its analysis.</p>', unsafe_allow_html=True)
+
+    meetings = kb.list_meetings(limit=100)
+    if not meetings:
+        st.info("No meetings have been analyzed yet.")
+    else:
+        meeting_query = st.text_input("Search meetings", placeholder="Search by meeting title...")
+        if meeting_query.strip():
+            query = meeting_query.lower()
+            meetings = [meeting for meeting in meetings if query in meeting.get("title", "").lower()]
+
+        st.caption(f"Showing {len(meetings)} meetings")
+        for meeting in meetings:
+            with st.container(border=True):
+                title_col, stats_col, action_col = st.columns([3, 2, 1])
+                title_col.markdown(f"**{meeting['title']}**")
+                title_col.caption(str(meeting.get("date", ""))[:10])
+                stats_col.caption(
+                    f"{meeting.get('speakers_count', 0)} speakers · "
+                    f"{meeting.get('tasks_count', 0)} tasks · "
+                    f"Score {meeting.get('productivity_score', 0)}/100"
+                )
+                if action_col.button("Open", key=f"open_meeting_{meeting['id']}", use_container_width=True):
+                    full = kb.get(meeting["id"])
+                    if full:
+                        st.session_state["current_result"] = full["analysis"]
+                        st.session_state["current_title"] = full["title"]
+                        st.session_state["current_transcript"] = full["transcript"]
+                        st.success("Meeting loaded. Open Meeting results from the sidebar.")
+
+
+# ═══════════════════════════════════════════
 #  PAGE: KNOWLEDGE BASE
 # ═══════════════════════════════════════════
 
 elif page == "📚 Knowledge Base":
     st.markdown('<h1 class="hero-header">Knowledge Base</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">Browse, search, and manage your analyzed meetings</p>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">Search inside meeting transcripts, summaries, decisions, and action items.</p>', unsafe_allow_html=True)
 
-    search_query = st.text_input("🔍 Search meetings", placeholder="Search by title, content, or keywords...")
+    search_query = st.text_input("Search meeting content", placeholder="Try: budget, James, launch date, API...")
 
     if search_query:
         meetings = kb.search(search_query)
         st.caption(f"Found **{len(meetings)}** results for \"{search_query}\"")
     else:
-        meetings = kb.list_meetings()
+        meetings = []
+        stored_count = len(kb.list_meetings())
+        if stored_count:
+            st.info(f"{stored_count} meetings are stored. Search for a topic, person, decision, or action item to find related records.")
+        else:
+            st.info("Analyze a meeting first to build your searchable knowledge base.")
 
-    if not meetings:
+    if search_query and not meetings:
         st.markdown("""
         <div class="empty-state">
-            <div class="icon">📚</div>
-            <p>No meetings stored yet.<br>Analyze your first meeting to see it here.</p>
+            <div class="icon">⌕</div>
+            <p>No matching meeting content was found.<br>Try another search term.</p>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -1025,12 +1464,118 @@ elif page == "📚 Knowledge Base":
 
 
 # ═══════════════════════════════════════════
+#  PAGE: MEMORY ASSISTANT
+# ═══════════════════════════════════════════
+
+elif page == "🧠 Memory Assistant":
+    st.markdown('<h1 class="hero-header">Meeting Memory Assistant</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">Ask questions across your saved meeting history and discover what changed over time.</p>', unsafe_allow_html=True)
+
+    examples = [
+        "What decisions were made about the product launch?",
+        "Who owns the unresolved tasks?",
+        "What risks appeared in recent meetings?",
+    ]
+    st.caption("Example questions: " + " · ".join(examples))
+    query = st.text_input("Ask your meeting history", placeholder="e.g. What did we agree to do about the API launch?")
+
+    if st.button("🧠 Search Meeting Memory", type="primary", use_container_width=True):
+        if not query.strip():
+            st.warning("Enter a question first.")
+        else:
+            with st.spinner("Searching saved meetings..."):
+                matches = retrieve_memory_matches(query)
+                st.session_state["memory_matches"] = matches
+                st.session_state["memory_query"] = query
+                st.session_state["memory_answer"] = answer_memory_question(query, matches) if matches else "No saved meetings matched your question."
+
+    if st.session_state.get("memory_answer"):
+        st.markdown('<div class="section-header"><span class="icon">💬</span> Answer</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="glass-card">{st.session_state["memory_answer"]}</div>', unsafe_allow_html=True)
+        matches = st.session_state.get("memory_matches", [])
+        if matches:
+            st.markdown(f"**Sources ({len(matches)})**")
+            for meeting in matches:
+                st.caption(f"📌 {meeting.get('title', 'Untitled')} · {str(meeting.get('date', ''))[:10]}")
+
+
+# ═══════════════════════════════════════════
+#  PAGE: ACCOUNTABILITY CENTER
+# ═══════════════════════════════════════════
+
+elif page == "✅ Accountability Center":
+    st.markdown('<h1 class="hero-header">Accountability Center</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">Track commitments across meetings and surface delivery risk before deadlines slip.</p>', unsafe_allow_html=True)
+    tasks = get_accountability_tasks()
+    today = datetime.now().date()
+    overdue = [task for task in tasks if task["due_date"] and task["due_date"] < today and task["status"] != "done"]
+    at_risk = [task for task in tasks if task["due_date"] and 0 <= (task["due_date"] - today).days <= 2 and task["status"] != "done"]
+    done = [task for task in tasks if task["status"] == "done"]
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Total tasks", len(tasks))
+    metric_cols[1].metric("Completed", len(done))
+    metric_cols[2].metric("Overdue", len(overdue), delta="Needs attention" if overdue else "On track", delta_color="inverse")
+    metric_cols[3].metric("Due within 2 days", len(at_risk), delta="Plan now" if at_risk else "Clear", delta_color="inverse")
+
+    if tasks:
+        owners = sorted({task["assignee"] for task in tasks})
+        status_filter = st.selectbox("Show tasks", ["All", "pending", "in progress", "done"])
+        owner_filter = st.selectbox("Filter by owner", ["All"] + owners)
+        visible = [task for task in tasks if (status_filter == "All" or task["status"] == status_filter) and (owner_filter == "All" or task["assignee"] == owner_filter)]
+        st.caption(f"Showing {len(visible)} of {len(tasks)} tasks")
+        for task in visible:
+            risk = "OVERDUE" if task in overdue else ("DUE SOON" if task in at_risk else "")
+            label = f"{task['priority'].upper()} · {task['assignee']} · {task['meeting']}"
+            with st.container(border=True):
+                st.markdown(f"**{label}** {f' · :red[{risk}]' if risk else ''}")
+                st.write(task["task"])
+                cols = st.columns([2, 2, 1])
+                cols[0].caption(f"Deadline: {task['deadline']}")
+                new_status = cols[1].selectbox("Status", ["pending", "in progress", "done"], index=["pending", "in progress", "done"].index(task["status"]) if task["status"] in {"pending", "in progress", "done"} else 0, key=f"status_{task['meeting_id']}_{task['task_index']}")
+                if cols[2].button("Save", key=f"save_{task['meeting_id']}_{task['task_index']}"):
+                    kb.update_task_status(task["meeting_id"], task["task_index"], new_status)
+                    st.success("Task status saved.")
+                    st.rerun()
+    else:
+        st.info("Analyze a meeting first to populate the accountability tracker.")
+
+
+# ═══════════════════════════════════════════
+#  PAGE: QUALITY COACH
+# ═══════════════════════════════════════════
+
+elif page == "🎯 Quality Coach":
+    st.markdown('<h1 class="hero-header">Meeting Quality Coach</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">Turn meeting analytics into specific improvements for your next conversation.</p>', unsafe_allow_html=True)
+    meetings = kb.list_meetings()
+    if meetings:
+        selected = st.selectbox("Choose a meeting to review", meetings, format_func=lambda meeting: f"{meeting['title']} · {str(meeting.get('date', ''))[:10]}")
+        full = kb.get(selected["id"]) if selected else None
+        if full:
+            analysis = full["analysis"]
+            score = analysis.get("productivity_score", {})
+            cols = st.columns(4)
+            cols[0].metric("Productivity", f"{score.get('total', 0)}/100")
+            cols[1].metric("Actions", len(analysis.get("tasks", [])))
+            cols[2].metric("Decisions", len(analysis.get("decisions", [])))
+            cols[3].metric("Speakers", analysis.get("stats", {}).get("speaker_count", 0))
+            st.markdown('<div class="section-header"><span class="icon">🧭</span> Recommended improvements</div>', unsafe_allow_html=True)
+            for title, recommendation in quality_recommendations(analysis):
+                with st.container(border=True):
+                    st.markdown(f"**{title}**")
+                    st.write(recommendation)
+    else:
+        st.info("Analyze a meeting first to receive coaching recommendations.")
+
+
+# ═══════════════════════════════════════════
 #  PAGE: ANALYTICS
 # ═══════════════════════════════════════════
 
 elif page == "📈 Analytics":
     st.markdown('<h1 class="hero-header">Analytics Dashboard</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">Cross-meeting insights and trends</p>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">A simple view of meeting patterns, follow-up, and team participation.</p>', unsafe_allow_html=True)
+    st.caption("Use these numbers to decide which meetings need better agendas, clearer owners, or follow-up reviews.")
 
     data = analytics_engine.get_dashboard_data()
     if not data:
@@ -1050,6 +1595,22 @@ elif page == "📈 Analytics":
             (f"{overview['avg_words']:,}", "Avg Words"),
             (f"{overview['avg_productivity']}", "Avg Score"),
         ])
+        st.caption("Meetings is the number analyzed. Total Tasks and Decisions count detected items. Avg Words indicates typical meeting length. Avg Score is the estimated productivity score out of 100.")
+
+        governance = get_governance_summary()
+        st.markdown('<div class="section-header">Meeting governance</div>', unsafe_allow_html=True)
+        st.caption("A practical view of whether meetings produce clear decisions and follow-up work.")
+        governance_cols = st.columns(4)
+        governance_cols[0].metric("Meetings with follow-up", f"{governance['follow_up_rate']}%")
+        governance_cols[1].metric("Meetings with decisions", f"{governance['decision_rate']}%")
+        governance_cols[2].metric("Open action items", governance["open_tasks"])
+        governance_cols[3].metric("Overdue action items", governance["overdue_tasks"])
+
+        if governance["needs_review"]:
+            with st.expander("Meetings that need review", expanded=False):
+                for item in governance["needs_review"]:
+                    st.markdown(f"**{item['title']}** · {item['date']}  ")
+                    st.caption(item["reason"])
 
         st.divider()
 
@@ -1057,9 +1618,10 @@ elif page == "📈 Analytics":
         trend = data.get("productivity_trend", [])
         if trend:
             st.markdown('<div class="section-header"><span class="icon">📈</span> Productivity Trend</div>', unsafe_allow_html=True)
+            st.caption("Each point is one meeting. A rising line suggests meetings are becoming clearer and more action-oriented; a falling line is a reason to review agendas and follow-up.")
             fig = px.line(trend, x="title", y="score", markers=True,
                           color_discrete_sequence=["#7c3aed"])
-            fig.update_layout(**PLOTLY_LAYOUT, height=320)
+            fig.update_layout(**PLOTLY_LAYOUT, height=320, title="Estimated productivity score by meeting", yaxis_title="Score out of 100", xaxis_title="Meeting")
             fig.update_traces(line=dict(width=3), marker=dict(size=10))
             st.plotly_chart(fig, use_container_width=True)
 
@@ -1067,12 +1629,13 @@ elif page == "📈 Analytics":
         action_trend = data.get("action_trend", [])
         if action_trend:
             st.markdown('<div class="section-header"><span class="icon">📊</span> Tasks & Decisions</div>', unsafe_allow_html=True)
+            st.caption("Compare the number of follow-up tasks with formal decisions. Many tasks with few decisions may mean the meeting needs clearer conclusions.")
             fig = go.Figure()
             fig.add_trace(go.Bar(name="Tasks", x=[a["title"] for a in action_trend], y=[a["tasks"] for a in action_trend],
                                  marker_color="#a78bfa", marker_line_width=0))
             fig.add_trace(go.Bar(name="Decisions", x=[a["title"] for a in action_trend], y=[a["decisions"] for a in action_trend],
                                  marker_color="#38bdf8", marker_line_width=0))
-            fig.update_layout(**PLOTLY_LAYOUT, barmode="group", height=320, legend=dict(orientation="h", y=1.1))
+            fig.update_layout(**PLOTLY_LAYOUT, barmode="group", height=320, title="Tasks and decisions per meeting", yaxis_title="Count", xaxis_title="Meeting", legend=dict(orientation="h", y=1.1))
             st.plotly_chart(fig, use_container_width=True)
 
         col_a, col_b = st.columns(2)
@@ -1080,6 +1643,7 @@ elif page == "📈 Analytics":
             sentiments = data.get("sentiment_distribution", {})
             if sentiments:
                 st.markdown('<div class="section-header"><span class="icon">💭</span> Sentiment</div>', unsafe_allow_html=True)
+                st.caption("Shows the overall language tone across saved meetings. Use it as context when reviewing difficult or successful periods.")
                 fig = px.pie(values=list(sentiments.values()), names=list(sentiments.keys()),
                              color_discrete_map={"positive": "#34d399", "neutral": "#64748b", "negative": "#f87171"},
                              hole=0.45)
@@ -1090,6 +1654,7 @@ elif page == "📈 Analytics":
             pf = data.get("participant_frequency", {})
             if pf:
                 st.markdown('<div class="section-header"><span class="icon">👥</span> Top Participants</div>', unsafe_allow_html=True)
+                st.caption("Counts how many saved meetings included each speaker. It does not measure performance or contribution quality.")
                 fig = px.bar(x=list(pf.values()), y=list(pf.keys()), orientation="h",
                              color=list(pf.values()), color_continuous_scale=[[0, "#4f46e5"], [1, "#a78bfa"]])
                 fig.update_layout(**PLOTLY_LAYOUT, height=300, showlegend=False, coloraxis_showscale=False)
@@ -1099,6 +1664,7 @@ elif page == "📈 Analytics":
         tf = data.get("topic_frequency", {})
         if tf:
             st.markdown('<div class="section-header"><span class="icon">🗂️</span> Popular Topics</div>', unsafe_allow_html=True)
+            st.caption("These are the most repeated topic keywords across saved meetings, useful for spotting recurring work or problems.")
             fig = px.bar(x=list(tf.keys())[:12], y=list(tf.values())[:12],
                          color=list(tf.values())[:12], color_continuous_scale=[[0, "#0ea5e9"], [1, "#38bdf8"]])
             fig.update_layout(**PLOTLY_LAYOUT, height=320, showlegend=False, coloraxis_showscale=False)
@@ -1143,7 +1709,7 @@ elif page == "📧 Generate Report":
 
         col_fmt, col_llm_opt = st.columns([2, 1])
         with col_fmt:
-            report_type = st.selectbox("📄 Report Format", ["📧 Email Follow-Up", "📝 Detailed Markdown", "🌐 HTML Report"])
+            report_type = st.selectbox("📄 Report Format", ["📧 Email Follow-Up", "📝 Detailed Markdown", "🌐 HTML Report", "📅 Calendar (.ics)"])
         with col_llm_opt:
             use_llm_report = st.checkbox("🤖 Enhance with LLM", value=ollama_ok, disabled=not ollama_ok)
 
@@ -1158,8 +1724,10 @@ elif page == "📧 Generate Report":
                         report = report_gen.generate_email(result, title)
                 elif "Markdown" in report_type:
                     report = report_gen.generate_markdown(result, title)
-                else:
+                elif "HTML" in report_type:
                     report = report_gen.generate_html(result, title)
+                else:
+                    report = report_gen.generate_ics(result, title)
 
                 st.session_state["generated_report"] = report
                 st.session_state["report_type"] = report_type
@@ -1173,12 +1741,36 @@ elif page == "📧 Generate Report":
             if "HTML" in r_type:
                 st.components.v1.html(report, height=700, scrolling=True)
             else:
-                st.code(report, language="markdown" if "Markdown" in r_type else "text")
+                import html as _html
+                escaped = _html.escape(report)
+                st.markdown(f"""
+<div style="
+    background: rgba(10, 8, 30, 0.85);
+    border: 1px solid rgba(124, 58, 237, 0.3);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin: 8px 0 16px;
+    max-height: 520px;
+    overflow-y: auto;
+    box-shadow: 0 4px 30px rgba(124,58,237,0.1);
+">
+<pre style="
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: 'Inter', 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.9rem;
+    line-height: 1.75;
+    color: #e2e8f0;
+">{escaped}</pre>
+</div>
+""", unsafe_allow_html=True)
 
-            ext = "html" if "HTML" in r_type else ("md" if "Markdown" in r_type else "txt")
+            ext = "html" if "HTML" in r_type else ("md" if "Markdown" in r_type else ("ics" if "Calendar" in r_type else "txt"))
+            mime = "text/calendar" if ext == "ics" else "text/plain"
             st.download_button(f"⬇️ Download .{ext}", report,
                                file_name=f"meeting_report_{datetime.now().strftime('%Y%m%d_%H%M')}.{ext}",
-                               mime="text/plain", use_container_width=True)
+                               mime=mime, use_container_width=True)
 
 
 # ═══════════════════════════════════════════
@@ -1207,6 +1799,40 @@ elif page == "⚙️ Settings":
         else:
             st.error("❌ Cannot connect to Ollama.")
             st.code(f"# Install: https://ollama.ai\n# Then:\nollama pull {ollama_model}", language="bash")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-header"><span class="icon">🎙️</span> Speech-to-Text Configuration</div>', unsafe_allow_html=True)
+    st.markdown("MeetMind transcribes English audio and video locally using Whisper.")
+    
+    whisper_model_options = [
+        "openai/whisper-tiny.en",
+        "openai/whisper-base.en",
+        "openai/whisper-small.en",
+        "openai/whisper-medium.en"
+    ]
+    current_model = config.WHISPER_MODEL
+    default_index = whisper_model_options.index(current_model) if current_model in whisper_model_options else 0
+    
+    selected_whisper_model = st.selectbox(
+        "Whisper Model (Tiny/Base are recommended for CPU)",
+        whisper_model_options,
+        index=default_index,
+        help="Tiny.en is fastest for CPU. Base.en and Small.en can improve accuracy but require more memory and processing time."
+    )
+    
+    if selected_whisper_model != config.WHISPER_MODEL:
+        config.WHISPER_MODEL = selected_whisper_model
+        st.success(f"Configured active model: `{selected_whisper_model}`")
+        
+    if st.button("📥 Download / Preload Model", use_container_width=True):
+        with st.spinner("Downloading Whisper model and loading into memory... (This might take a minute on first run)"):
+            try:
+                # Preload pipeline
+                transcriber.get_pipeline(selected_whisper_model)
+                st.success(f"✅ Whisper model `{selected_whisper_model}` is ready and loaded!")
+            except Exception as e:
+                st.error(f"❌ Failed to load model: {e}")
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)

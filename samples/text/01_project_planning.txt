@@ -1,0 +1,7 @@
+Project Planning Meeting
+
+Sarah: Good morning. Today we will plan the new mobile app.
+James: The design is ready. We need two weeks to build the first version.
+Maria: I will prepare the test plan by Friday.
+James: We agreed to show the first version next Monday.
+Sarah: Please send me the task list before the end of today.

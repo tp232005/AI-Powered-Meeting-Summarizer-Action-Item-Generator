@@ -3,6 +3,7 @@ Report Generator — auto-generate meeting reports and emails.
 Uses Jinja2 templates for formatted output.
 """
 from datetime import datetime
+import re
 from jinja2 import Template
 
 
@@ -195,6 +196,63 @@ HTML_TEMPLATE = Template("""<!DOCTYPE html>
 
 class ReportGenerator:
     """Generate formatted reports from meeting analysis."""
+
+    @staticmethod
+    def generate_ics(analysis: dict, title: str = "Meeting") -> str:
+        """Generate an iCalendar file containing one all-day event per task."""
+        meeting_date = ReportGenerator._parse_calendar_date(
+            analysis.get("timestamp", datetime.now().isoformat()), datetime.now()
+        )
+        events = []
+        for index, task in enumerate(analysis.get("tasks", [])):
+            deadline = str(task.get("deadline", "Not specified"))
+            due_date = ReportGenerator._parse_calendar_date(deadline, meeting_date)
+            end_date = due_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = end_date.fromordinal(end_date.toordinal() + 1)
+            summary = f"[{task.get('priority', 'low')}] {task.get('task', 'Action item')}"
+            description = (
+                f"Assignee: {task.get('assignee', 'Not specified')}\n"
+                f"Deadline: {deadline}\nSource meeting: {title}"
+            )
+            events.extend([
+                "BEGIN:VEVENT",
+                f"UID:meetmind-{index}-{int(datetime.now().timestamp())}@meetmind",
+                f"DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}",
+                f"DTSTART;VALUE=DATE:{due_date.strftime('%Y%m%d')}",
+                f"DTEND;VALUE=DATE:{end_date.strftime('%Y%m%d')}",
+                f"SUMMARY:{ReportGenerator._ics_escape(summary)}",
+                f"DESCRIPTION:{ReportGenerator._ics_escape(description)}",
+                "END:VEVENT",
+            ])
+        return "\r\n".join([
+            "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//MeetMind//Meeting Actions//EN",
+            "CALSCALE:GREGORIAN", *events, "END:VCALENDAR", ""
+        ])
+
+    @staticmethod
+    def _parse_calendar_date(value: str, fallback: datetime) -> datetime:
+        """Parse common ISO, numeric, and month-name deadline formats."""
+        text = str(value or "").strip()
+        for date_format in ("%Y-%m-%d", "%Y/%m/%d", "%B %d, %Y", "%b %d, %Y", "%B %d", "%b %d"):
+            try:
+                parsed = datetime.strptime(text, date_format)
+                return parsed.replace(year=fallback.year) if "%Y" not in date_format else parsed
+            except ValueError:
+                continue
+        match = re.search(r"\b(\d{1,2})[/. -](\d{1,2})(?:[/. -](\d{2,4}))?\b", text)
+        if match:
+            year = int(match.group(3) or fallback.year)
+            if year < 100:
+                year += 2000
+            try:
+                return datetime(year, int(match.group(2)), int(match.group(1)))
+            except ValueError:
+                pass
+        return fallback
+
+    @staticmethod
+    def _ics_escape(value: str) -> str:
+        return str(value).replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
     @staticmethod
     def generate_markdown(analysis: dict, title: str = "Meeting") -> str:

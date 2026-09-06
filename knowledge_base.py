@@ -144,6 +144,25 @@ class KnowledgeBase:
         conn.commit()
         return cursor.rowcount > 0
 
+    def update_task_status(self, meeting_id: int, task_index: int, status: str) -> bool:
+        """Persist a task status inside a saved meeting analysis."""
+        if status not in {"pending", "in progress", "done"}:
+            raise ValueError("Unsupported task status")
+        meeting = self.get(meeting_id)
+        if not meeting:
+            return False
+        tasks = meeting["analysis"].get("tasks", [])
+        if task_index < 0 or task_index >= len(tasks):
+            return False
+        tasks[task_index]["status"] = status
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE meetings SET analysis = ? WHERE id = ?",
+            (json.dumps(meeting["analysis"], default=str), meeting_id),
+        )
+        conn.commit()
+        return True
+
     # ── Search ──
 
     def search(self, query: str, limit: int = 20) -> list:

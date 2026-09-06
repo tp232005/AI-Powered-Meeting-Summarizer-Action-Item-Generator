@@ -40,6 +40,42 @@ const Export = (() => {
     return JSON.stringify({title, ...result}, null, 2);
   };
 
+  const icsEscape = value => String(value || '')
+    .replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+
+  const toICSDate = (value, fallback) => {
+    const text = String(value || '').trim();
+    const parsed = new Date(text);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10).replace(/-/g, '');
+    }
+    const match = text.match(/(?:^|\s)(\d{1,2})[/. -](\d{1,2})(?:[/. -](\d{2,4}))?/);
+    if (match) {
+      const year = match[3] ? (match[3].length === 2 ? '20' + match[3] : match[3]) : fallback.getFullYear();
+      return `${year}${match[2].padStart(2, '0')}${match[1].padStart(2, '0')}`;
+    }
+    return fallback.toISOString().slice(0, 10).replace(/-/g, '');
+  };
+
+  const toCalendar = (result, title) => {
+    const meetingDate = new Date(result.timestamp || Date.now());
+    const events = (result.actionItems || []).map((item, index) => {
+      const date = toICSDate(item.deadline, meetingDate);
+      const nextDate = new Date(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T00:00:00`);
+      nextDate.setDate(nextDate.getDate() + 1);
+      const end = nextDate.toISOString().slice(0, 10).replace(/-/g, '');
+      const summary = `[${item.priority || 'low'}] ${item.text || 'Action item'}`;
+      const description = `Assignee: ${item.assignee || 'Not specified'}\nDeadline: ${item.deadline || 'Not specified'}\nSource meeting: ${title}`;
+      return [
+        'BEGIN:VEVENT', `UID:meetmind-${Date.now()}-${index}@meetmind`, `DTSTAMP:${new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15)}Z`,
+        `DTSTART;VALUE=DATE:${date}`, `DTEND;VALUE=DATE:${end}`, `SUMMARY:${icsEscape(summary)}`,
+        `DESCRIPTION:${icsEscape(description)}`, 'END:VEVENT'
+      ].join('\r\n');
+    });
+    return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MeetMind//Meeting Actions//EN', 'CALSCALE:GREGORIAN', ...events, 'END:VCALENDAR'].join('\r\n') + '\r\n';
+  };
+
   const toPrintHTML = (result, title) => {
     const d = new Date(result.timestamp).toLocaleString();
     return `<!DOCTYPE html><html><head><title>${title}</title>
@@ -63,6 +99,7 @@ const Export = (() => {
 
   const exportMarkdown = (result, title) => download(toMarkdown(result,title), `meeting-${Date.now()}.md`, 'text/markdown');
   const exportJSON = (result, title) => download(toJSON(result,title), `meeting-${Date.now()}.json`, 'application/json');
+  const exportCalendar = (result, title) => download(toCalendar(result, title), `meeting-actions-${Date.now()}.ics`, 'text/calendar');
 
   const exportPDF = (result, title) => {
     const html = toPrintHTML(result, title);
@@ -82,5 +119,5 @@ const Export = (() => {
     }
   };
 
-  return {exportMarkdown, exportJSON, exportPDF, copyToClipboard};
+  return {exportMarkdown, exportJSON, exportPDF, exportCalendar, copyToClipboard};
 })();

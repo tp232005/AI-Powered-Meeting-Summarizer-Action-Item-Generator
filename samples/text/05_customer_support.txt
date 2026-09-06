@@ -1,0 +1,7 @@
+Customer Support Meeting
+
+Leo: Customers are asking for faster replies.
+Nora: The most common problem is password recovery.
+Leo: We should add a simple help page for this problem.
+Nora: I will write the help page by Tuesday.
+Leo: We will check the number of support tickets next week.
