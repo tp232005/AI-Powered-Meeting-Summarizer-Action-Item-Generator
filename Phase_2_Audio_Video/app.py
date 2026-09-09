@@ -17,6 +17,8 @@ from knowledge_base import KnowledgeBase
 from report_generator import ReportGenerator
 from analytics import MeetingAnalytics
 from transcription_engine import TranscriptionEngine
+from auth import AuthManager
+from calendar_manager import CalendarManager
 
 
 st.set_page_config(
@@ -145,7 +147,81 @@ st.markdown("""
         border: 1px solid var(--line);
         border-radius: 14px;
         padding: clamp(18px, 3vw, 30px);
-        margin-bottom: 20px;
+        .stCaption, [data-testid="stCaptionContainer"] { color: #9ca3af !important; }
+        /* ── MeetMind product system ── */
+        :root {
+            --canvas: #0a0f14;
+            --panel: #111820;
+            --panel-raised: #17212b;
+            --line: #2a3946;
+            --line-soft: rgba(160, 184, 193, 0.14);
+            --ink: #eef4f3;
+            --muted: #91a2aa;
+            --accent: #63d5bd;
+            --accent-strong: #3eb29e;
+            --blue: #83b9e8;
+            --warning: #e7b86d;
+        }
+        .stApp { background: var(--canvas) !important; color: var(--ink) !important; }
+        .stApp:before {
+            display: block;
+            background: linear-gradient(135deg, rgba(99, 213, 189, 0.05), transparent 32%),
+                        linear-gradient(315deg, rgba(131, 185, 232, 0.04), transparent 38%);
+        }
+        .main .block-container { max-width: 1280px; padding: 2.5rem clamp(1.25rem, 4vw, 4.5rem) 5rem; }
+        h1, h2, h3, h4, .hero-header, .page-heading, .shell-title { font-family: 'Space Grotesk', sans-serif !important; }
+        h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
+        .top-shell { border-bottom-color: var(--line); padding-bottom: 1.25rem; margin-bottom: 2.25rem; }
+        .breadcrumb, .nav-group-label { color: #6f838d !important; letter-spacing: 0.11em; }
+        .shell-title { color: var(--ink) !important; font-size: 1.08rem; }
+        .hero-header { color: var(--ink) !important; font-size: clamp(2.35rem, 5vw, 4.2rem); line-height: 1.02; letter-spacing: -0.045em !important; max-width: 900px; }
+        .hero-sub, .page-description { color: var(--muted) !important; max-width: 720px; line-height: 1.7; }
+        section[data-testid="stSidebar"] { background: #0d141b !important; border-right: 1px solid var(--line) !important; width: 250px !important; min-width: 250px !important; max-width: 250px !important; }
+        .logo-container { padding: 1.05rem 0.35rem 1.35rem; margin-bottom: 1.4rem; border-bottom-color: var(--line); }
+        .logo-icon { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: #09221d; font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 1rem; }
+        .logo-text .name { color: var(--ink); font-family: 'Space Grotesk', sans-serif; font-size: 1.08rem; letter-spacing: -0.02em; }
+        .logo-text .sub { color: var(--muted); font-size: 0.66rem; }
+        section[data-testid="stSidebar"] .stRadio > div { gap: 0.24rem; }
+        section[data-testid="stSidebar"] .stRadio > div > label { border-radius: 8px; padding: 0.45rem 0.65rem; border: 1px solid transparent; }
+        section[data-testid="stSidebar"] .stRadio > div > label:hover { background: rgba(99, 213, 189, 0.07); border-color: rgba(99, 213, 189, 0.12); }
+        section[data-testid="stSidebar"] .stRadio > div > label[data-checked="true"] { background: rgba(99, 213, 189, 0.12); border-color: rgba(99, 213, 189, 0.25); }
+        section[data-testid="stSidebar"] .stRadio label, .stRadio > div > label > div > p { color: #c7d4d7 !important; font-size: 0.88rem !important; font-weight: 600 !important; }
+        .glass-card, .metric-card, .task-card, .participant-card, .history-card, .chart-container { background: var(--panel) !important; border: 1px solid var(--line-soft) !important; border-radius: 10px !important; }
+        .glass-card { padding: 1.35rem; box-shadow: 0 18px 45px rgba(0, 0, 0, 0.12); }
+        .glass-card:hover, .metric-card:hover, .history-card:hover { border-color: rgba(99, 213, 189, 0.38) !important; }
+        .metric-row { gap: 0.75rem; margin: 1.4rem 0 2rem; }
+        .metric-card { padding: 1.15rem; }
+        .metric-card .value { color: var(--accent) !important; font-family: 'Space Grotesk', sans-serif; font-size: 1.65rem; }
+        .metric-card .label { color: var(--muted) !important; }
+        .section-header { color: var(--ink); font-size: 1.18rem; font-family: 'Space Grotesk', sans-serif; }
+        .section-header .icon { display: none; }
+        .decision-card, .risk-card { background: var(--panel-raised) !important; border-left: 3px solid var(--accent) !important; border-radius: 0 8px 8px 0 !important; }
+        .task-card { padding: 1rem 1.1rem; }
+        .task-card .task-text { color: var(--ink); }
+        .task-card .task-meta span { color: var(--muted); }
+        .stTextArea textarea, .stTextInput input, .stDateInput input, .stTimeInput input { background: #0d151d !important; border: 1px solid #334653 !important; border-radius: 8px !important; color: var(--ink) !important; }
+        .stTextArea textarea:focus, .stTextInput input:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 1px var(--accent) !important; }
+        .stSelectbox > div > div { background: #0d151d !important; border: 1px solid #334653 !important; border-radius: 8px !important; }
+        button[data-testid="stBaseButton-primary"] { background: var(--accent-strong) !important; color: #071713 !important; border: 0 !important; border-radius: 8px !important; font-weight: 800 !important; box-shadow: 0 8px 24px rgba(62, 178, 158, 0.16) !important; }
+        button[data-testid="stBaseButton-primary"]:hover { background: var(--accent) !important; transform: translateY(-1px); }
+        button[data-testid="stBaseButton-secondary"], .stDownloadButton button { background: transparent !important; border: 1px solid #3a4e5a !important; color: #dbe6e6 !important; border-radius: 8px !important; }
+        button[data-testid="stBaseButton-secondary"]:hover, .stDownloadButton button:hover { background: rgba(99, 213, 189, 0.08) !important; border-color: var(--accent) !important; }
+        .stTabs [data-baseweb="tab-list"] { border-bottom: 1px solid var(--line); gap: 1.5rem; }
+        .stTabs [data-baseweb="tab"] { color: var(--muted) !important; padding: 0.7rem 0.1rem; }
+        .stTabs [aria-selected="true"] { color: var(--accent) !important; border-bottom: 2px solid var(--accent) !important; }
+        .stExpander { background: var(--panel) !important; border: 1px solid var(--line) !important; border-radius: 9px !important; }
+        div[data-testid="stMetric"] { background: var(--panel) !important; border: 1px solid var(--line-soft); border-radius: 9px; }
+        div[data-testid="stMetricValue"] { color: var(--ink) !important; }
+        div[data-testid="stMetricLabel"] { color: var(--muted) !important; }
+        .stProgress > div > div > div { background: var(--accent) !important; }
+        .stAlert { border-radius: 8px !important; }
+        .stCaption, [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
+        @media (max-width: 760px) {
+            section[data-testid="stSidebar"] { width: min(86vw, 280px) !important; min-width: min(86vw, 280px) !important; max-width: min(86vw, 280px) !important; }
+            .main .block-container { padding: 1.4rem 1rem 3rem; }
+            .hero-header { font-size: 2.55rem; }
+            .metric-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
         box-shadow: 0 16px 45px rgba(0, 0, 0, 0.16);
     }
     .glass-card:hover {
@@ -678,6 +754,14 @@ st.markdown("""
     div[data-testid="stMetricLabel"] { color: #9ca3af !important; }
     .stProgress > div > div > div { background: #7c5cfc !important; }
     .stCaption, [data-testid="stCaptionContainer"] { color: #9ca3af !important; }
+    /* Final product pass: neutral workspace entry and teal actions. */
+    .auth-intro { max-width: 1120px; margin: 0 auto; }
+    .auth-intro .hero-header { max-width: 760px; font-size: clamp(2.5rem, 5vw, 4.4rem); letter-spacing: -0.045em; }
+    .auth-intro .hero-sub { max-width: 650px; font-size: 1.05rem; }
+    button[data-testid="stBaseButton-primary"], button[kind="primary"] { background: #3eb29e !important; color: #071713 !important; border: 0 !important; border-radius: 8px !important; font-weight: 800 !important; box-shadow: 0 8px 22px rgba(62, 178, 158, 0.18) !important; }
+    button[data-testid="stBaseButton-primary"]:hover, button[kind="primary"]:hover { background: #63d5bd !important; }
+    .stTabs [aria-selected="true"] { color: #63d5bd !important; border-bottom-color: #63d5bd !important; }
+    .stApp { background: #0a0f14 !important; }
     @media (max-width: 760px) { .main .block-container { padding: 1rem 1rem 2.5rem; } .top-shell { margin-bottom: 1.2rem; } .shell-actions { display: none; } }
 </style>
 """, unsafe_allow_html=True)
@@ -703,12 +787,68 @@ def get_llm():
 def get_transcriber():
     return TranscriptionEngine()
 
+@st.cache_resource
+def get_auth():
+    return AuthManager(config.DB_PATH)
+
+@st.cache_resource
+def get_calendar():
+    return CalendarManager(config.DB_PATH)
+
 analyzer = get_analyzer()
 kb = get_kb()
 llm = get_llm()
 transcriber = get_transcriber()
 report_gen = ReportGenerator()
 analytics_engine = MeetingAnalytics(kb)
+auth = get_auth()
+calendar = get_calendar()
+
+
+def render_authentication():
+    """Render the public sign-in/register boundary for private meeting data."""
+    st.markdown('<div class="auth-intro">', unsafe_allow_html=True)
+    st.markdown('<div class="top-shell"><div><div class="breadcrumb">MEETMIND WORKSPACE</div><div class="shell-title">Meeting intelligence platform</div></div><div class="shell-actions"><span class="engine-dot"></span><span>Private workspace</span></div></div>', unsafe_allow_html=True)
+    st.markdown('<h1 class="hero-header">Bring every meeting into focus.</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">A secure workspace for multilingual transcripts, decisions, action items, deadlines and institutional memory.</p>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    sign_in, sign_up = st.tabs(["Sign in", "Create account"])
+    with sign_in:
+        with st.form("sign_in_form"):
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Sign in", type="primary")
+        if submitted:
+            user = auth.authenticate(email, password)
+            if user:
+                st.session_state["current_user"] = user
+                st.rerun()
+            st.error("Invalid email or password.")
+    with sign_up:
+        with st.form("sign_up_form"):
+            name = st.text_input("Name")
+            email = st.text_input("Email", key="register_email")
+            password = st.text_input("Password", type="password", key="register_password")
+            organization = st.text_input("Organization name")
+            organization_type = st.selectbox(
+                "Organization type",
+                ["Student Team", "Company", "College", "School", "University", "Hospital", "NGO", "Research Lab"],
+            )
+            submitted = st.form_submit_button("Create account", type="primary")
+        if submitted:
+            try:
+                st.session_state["current_user"] = auth.register(name, email, password, organization, organization_type)
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
+
+
+current_user = st.session_state.get("current_user")
+if not current_user:
+    render_authentication()
+    st.stop()
+kb.set_actor(current_user["id"], current_user["organization_id"])
+calendar.set_actor(current_user["id"], current_user["organization_id"])
 
 # ── Plotly Dark Theme ──
 PLOTLY_LAYOUT = dict(
@@ -900,7 +1040,7 @@ COLORS = ["#a78bfa", "#38bdf8", "#34d399", "#fbbf24", "#f472b6", "#fb923c", "#81
 with st.sidebar:
     st.markdown("""
     <div class="logo-container">
-        <div class="logo-icon">🧠</div>
+        <div class="logo-icon">M</div>
         <div class="logo-text">
             <div class="name">MeetMind</div>
             <div class="sub">Meeting Assistant</div>
@@ -910,20 +1050,21 @@ with st.sidebar:
 
     st.markdown('<div class="nav-group-label">WORKSPACE</div>', unsafe_allow_html=True)
     navigation_labels = {
-        "Analyze Meeting": "🏠 Analyze Meeting",
-        "Meetings": "📅 Meetings",
-        "Knowledge Base": "📚 Knowledge Base",
-        "Dashboard": "📊 Results Dashboard",
-        "Analytics": "📈 Analytics",
-        "Memory Assistant": "🧠 Memory Assistant",
-        "Quality Coach": "🎯 Quality Coach",
-        "Action Items": "✅ Accountability Center",
-        "Reports": "📧 Generate Report",
-        "Settings": "⚙️ Settings",
+        "Analyze Meeting": "Analyze Meeting",
+        "Meetings": "Meetings",
+        "Calendar": "Calendar",
+        "Knowledge Base": "Knowledge Base",
+        "Dashboard": "Results Dashboard",
+        "Analytics": "Analytics",
+        "Memory Assistant": "Memory Assistant",
+        "Quality Coach": "Quality Coach",
+        "Action Items": "Accountability Center",
+        "Reports": "Generate Report",
+        "Settings": "Settings",
     }
     selected_navigation = st.radio(
         "Navigation",
-        ["Analyze Meeting", "Meetings", "Knowledge Base", "Dashboard", "Analytics",
+        ["Analyze Meeting", "Meetings", "Calendar", "Knowledge Base", "Dashboard", "Analytics",
          "Memory Assistant", "Quality Coach", "Action Items", "Reports", "Settings"],
         label_visibility="collapsed",
     )
@@ -936,20 +1077,25 @@ with st.sidebar:
     ollama_ok = llm.is_available()
     meeting_count = len(kb.list_meetings())
     st.caption(f"{meeting_count} meetings")
+    st.caption(f"{current_user['name']} · {current_user['role']}")
+    if st.button("Sign out", type="secondary"):
+        st.session_state.clear()
+        st.rerun()
 
 
 # ── Product shell ──
 page_titles = {
-    "🏠 Analyze Meeting": ("Analyze Meeting", "Workspace / New analysis"),
-    "📅 Meetings": ("Meetings", "Workspace / History"),
-    "📊 Results Dashboard": ("Meeting results", "Workspace / Results"),
-    "📚 Knowledge Base": ("Knowledge Base", "Workspace / Archive"),
-    "📈 Analytics": ("Analytics", "Insights / Trends"),
-    "🧠 Memory Assistant": ("Memory Assistant", "AI tools / Recall"),
-    "✅ Accountability Center": ("Accountability Center", "Output / Action items"),
-    "🎯 Quality Coach": ("Quality Coach", "AI tools / Coaching"),
-    "📧 Generate Report": ("Generate Report", "Output / Export"),
-    "⚙️ Settings": ("Settings", "System / Preferences"),
+    "Analyze Meeting": ("Analyze Meeting", "Workspace / New analysis"),
+    "Meetings": ("Meetings", "Workspace / History"),
+    "Calendar": ("Calendar", "Workspace / Deadlines"),
+    "Results Dashboard": ("Meeting results", "Workspace / Results"),
+    "Knowledge Base": ("Knowledge Base", "Workspace / Archive"),
+    "Analytics": ("Analytics", "Insights / Trends"),
+    "Memory Assistant": ("Memory Assistant", "AI tools / Recall"),
+    "Accountability Center": ("Accountability Center", "Output / Action items"),
+    "Quality Coach": ("Quality Coach", "AI tools / Coaching"),
+    "Generate Report": ("Generate Report", "Output / Export"),
+    "Settings": ("Settings", "System / Preferences"),
 }
 shell_title, shell_breadcrumb = page_titles.get(page, ("MeetMind", "Workspace"))
 st.markdown(f"""
@@ -984,39 +1130,11 @@ def render_metric_row(metrics):
 #  PAGE: ANALYZE MEETING
 # ═══════════════════════════════════════════
 
-if page == "🏠 Analyze Meeting":
+if page == "Analyze Meeting":
     st.markdown('<h1 class="page-heading">Analyze a meeting</h1>', unsafe_allow_html=True)
     st.markdown('<p class="page-description">Upload a recording or paste a transcript to get a summary and action items.</p>', unsafe_allow_html=True)
 
-    meeting_templates = {
-        "Project review": (
-            "Project Review Meeting",
-            "Meeting: Project Review\nDate:\nAttendees:\n\nProgress since the last meeting:\n\nProblems or risks:\n\nDecisions made:\n\nAction items, owners, and deadlines:\n",
-        ),
-        "Class committee": (
-            "Class Committee Meeting",
-            "Meeting: Class Committee\nDate:\nStudents and staff present:\n\nTopics discussed:\n\nStudent concerns:\n\nDecisions made:\n\nAction items, owners, and deadlines:\n",
-        ),
-        "Team stand-up": (
-            "Team Stand-up",
-            "Meeting: Team Stand-up\nDate:\nTeam members:\n\nCompleted since the last meeting:\n\nPlanned work:\n\nBlockers:\n\nAction items, owners, and deadlines:\n",
-        ),
-        "Event planning": (
-            "Event Planning Meeting",
-            "Meeting: Event Planning\nDate:\nOrganizers present:\n\nEvent goal and date:\n\nTasks to complete:\n\nBudget or venue concerns:\n\nDecisions made:\n\nAction items, owners, and deadlines:\n",
-        ),
-    }
-    with st.expander("Start from a meeting template", expanded=False):
-        template_name = st.selectbox("Template", list(meeting_templates.keys()))
-        st.caption("Templates give teams and college committees a consistent structure before they analyze notes.")
-        if st.button("Use template", key="use_meeting_template", type="secondary"):
-            template_title, template_text = meeting_templates[template_name]
-            st.session_state["_sample_title"] = template_title
-            st.session_state["_sample_text"] = template_text
-            st.rerun()
-
-    # Input card
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    # Meeting input
     col1, col2 = st.columns([3, 1])
     with col1:
         default_title = st.session_state.get("_sample_title", "")
@@ -1024,37 +1142,62 @@ if page == "🏠 Analyze Meeting":
     with col2:
         summary_len = st.slider("Summary length", 2, 12, 5)
 
-    # 🎙️ Audio Input flow
-    st.markdown("<div class='section-header'>Audio recording</div>", unsafe_allow_html=True)
-    uploaded_file = st.file_uploader(
-        "Upload meeting recording",
-        type=["mp3", "wav", "m4a", "flac", "mp4", "mkv", "avi", "mov", "webm", "ogg"],
-        help="Upload audio or video to transcribe to text before running the meeting summary pipeline."
+    lang_col, output_col = st.columns(2)
+    with lang_col:
+        meeting_language = st.selectbox("Meeting language", list(config.SUPPORTED_LANGUAGES.keys()), index=0)
+    with output_col:
+        output_language = st.selectbox("Output language", ["English", "Hindi", "Marathi"], index=0)
+
+    input_mode = st.radio(
+        "Meeting input",
+        ["Text transcript", "Audio recording", "Video recording"],
+        horizontal=True,
+        key="meeting_input_mode",
     )
+
+    uploaded_file = None
+    if input_mode == "Text transcript":
+        st.markdown("<div class='section-header'>Text transcript</div>", unsafe_allow_html=True)
+    else:
+        is_video = input_mode == "Video recording"
+        accepted_types = ["mp4", "mkv", "avi", "mov", "webm"] if is_video else ["mp3", "wav", "m4a", "flac", "ogg"]
+        st.markdown(
+            f"<div class='section-header'>{'Video' if is_video else 'Audio'} recording</div>",
+            unsafe_allow_html=True,
+        )
+        uploaded_file = st.file_uploader(
+            f"Upload {('video' if is_video else 'audio')} recording",
+            type=accepted_types,
+            help="The recording is normalized, chunked, transcribed, and then analyzed.",
+            key=f"{input_mode.lower().replace(' ', '_')}_uploader",
+        )
 
     if uploaded_file is not None:
         col_u1, col_u2 = st.columns([3, 1])
         with col_u1:
-            st.info(f"📁 **File Uploaded**: `{uploaded_file.name}` ({uploaded_file.size / (1024*1024):.2f} MB)")
+            st.info(f"File uploaded: `{uploaded_file.name}` ({uploaded_file.size / (1024*1024):.2f} MB)")
         with col_u2:
             if st.button("Transcribe", type="secondary", use_container_width=True):
                 try:
                     temp_file_path = safe_read_uploaded_audio(uploaded_file)
                     if temp_file_path is None:
-                        st.error("❌ No audio file was uploaded.")
+                        st.error("No audio file was uploaded.")
                     else:
-                        status = st.status("Uploading audio...\nTranscribing audio...\nGenerating summary...", expanded=True)
+                        status = st.status("Uploading recording...\nTranscribing chunks...\nPreparing transcript...", expanded=True)
                         try:
-                            with st.spinner("🧠 Converting audio to text and preparing the transcript..."):
-                                transcribed_text = transcriber.transcribe_file(temp_file_path)
+                            with st.spinner("Converting audio to text and preparing the transcript..."):
+                                transcription = transcriber.transcribe_file_detailed(temp_file_path)
+                                transcribed_text = transcription["transcript"]
                             status.update(label="Completed", state="complete")
                             st.session_state["_sample_text"] = transcribed_text
+                            st.session_state["_transcription_metadata"] = transcription
                             st.session_state["_sample_title"] = os.path.splitext(uploaded_file.name)[0]
-                            st.success("🎉 Transcription complete! The transcript has been loaded into the text area and is ready for analysis.")
+                            detected = transcription["detected_language"]
+                            st.success(f"Transcription complete. Detected language: {detected['language']} ({detected['confidence']} confidence).")
                             st.rerun()
                         except Exception as exc:
                             status.update(label="Failed", state="error")
-                            st.error(f"❌ Audio processing failed: {exc}")
+                            st.error(f"Recording processing failed: {exc}")
                         finally:
                             if os.path.exists(temp_file_path):
                                 try:
@@ -1062,22 +1205,31 @@ if page == "🏠 Analyze Meeting":
                                 except Exception:
                                     pass
                 except ValueError as exc:
-                    st.error(f"❌ {exc}")
+                    st.error(str(exc))
                 except Exception as exc:
-                    st.error(f"❌ Audio could not be processed. Please try another recording or check the file.")
+                    st.error("Recording could not be processed. Please try another file or check the recording.")
                     st.caption(str(exc))
 
     default_text = st.session_state.get("_sample_text", "")
-    transcript = st.text_area(
-        "Paste transcript",
-        value=default_text,
-        height=280,
-        placeholder="Paste your meeting transcript here or use the file uploader above to transcribe a meeting recording...\n\nSupports speaker diarization:\n  Sarah: Good morning everyone...\n  James: Let's start with the agenda...\n  [Speaker Name] text also works\n\nOr paste unformatted meeting minutes.",
-    )
+    transcript = ""
+    if input_mode == "Text transcript":
+        transcript = st.text_area(
+            "Paste transcript",
+            value=default_text,
+            height=280,
+            placeholder="Paste your meeting transcript here. Speaker format is supported, for example:\n\nSarah: Good morning everyone.\nJames: Let's start with the agenda.",
+        )
+    elif default_text:
+        transcript = st.text_area(
+            "Transcript preview",
+            value=default_text,
+            height=220,
+            help="Review the generated transcript before analysis.",
+        )
 
     col_s, col_l, col_a = st.columns([1, 1, 2])
     with col_s:
-        if st.button("Load sample", use_container_width=True, type="secondary"):
+        if input_mode == "Text transcript" and st.button("Load text test", use_container_width=True, type="secondary"):
             sample_path = os.path.join(os.path.dirname(__file__), "samples", "text", "sample_meeting.txt")
             if os.path.exists(sample_path):
                 with open(sample_path, "r", encoding="utf-8") as f:
@@ -1091,40 +1243,58 @@ if page == "🏠 Analyze Meeting":
     with col_a:
         analyze_clicked = st.button("Analyze meeting", type="primary", use_container_width=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)
-
     # Run analysis
     if analyze_clicked and transcript.strip():
-        progress = st.progress(0, text="🧠 Initializing NLP pipeline...")
-        result = analyzer.analyze(transcript)
+        progress = st.progress(0, text="Initializing analysis pipeline...")
+        result = analyzer.analyze_hierarchical(transcript)
 
         if "error" in result:
             st.error(result["error"])
         else:
-            progress.progress(60, text="📊 Processing results...")
+            progress.progress(60, text="Processing results...")
 
             if use_llm and ollama_ok:
-                progress.progress(70, text="🤖 Enhancing with LLM...")
-                llm_summary = llm.generate_summary(transcript, "concise")
+                progress.progress(70, text="Enhancing with language model...")
+                llm_context = "\n\n".join(
+                    chunk["summary"] for chunk in result.get("chunk_summaries", [])
+                ) or transcript
+                llm_summary = llm.generate_summary(llm_context, "concise")
                 if llm_summary:
                     result["llm_summary"] = llm_summary
-                llm_tasks = llm.extract_tasks(transcript)
+                llm_tasks = llm.extract_tasks(llm_context)
                 if llm_tasks:
                     result["llm_tasks"] = llm_tasks
-                llm_risks = llm.analyze_risks(transcript)
+                llm_risks = llm.analyze_risks(llm_context)
                 if llm_risks:
                     result["llm_risks"] = llm_risks
+
+            detected_language = transcriber.detect_language(transcript)
+            result["input_language"] = meeting_language if meeting_language != "Auto Detect" else detected_language["language"]
+            result["detected_language"] = detected_language
+            result["output_language"] = output_language
+            transcription_metadata = st.session_state.get("_transcription_metadata", {})
+            result["transcript_segments"] = (
+                transcription_metadata.get("segments", [])
+                if transcription_metadata.get("transcript") == transcript else []
+            )
+            if output_language != "English":
+                translation_source = result.get("llm_summary") or result.get("short_summary", "")
+                translated = llm.translate_text(translation_source, output_language) if ollama_ok else None
+                if translated:
+                    result["translated_summary"] = translated
+                else:
+                    st.info("Output translation is unavailable offline; the original-language transcript and structured analysis are preserved.")
 
             title = meeting_title or f"Meeting {datetime.now().strftime('%Y-%m-%d %H:%M')}"
             st.session_state["current_result"] = result
             st.session_state["current_title"] = title
             st.session_state["current_transcript"] = transcript
 
-            progress.progress(85, text="💾 Saving to Knowledge Base...")
+            progress.progress(85, text="Saving to Knowledge Base...")
             kb.save(title, transcript, result)
 
-            progress.progress(100, text="✅ Complete!")
-            st.success(f"✅ Analysis complete — **{title}** saved to Knowledge Base! Navigate to **Results Dashboard** to see the full analysis.", icon="🎉")
+            progress.progress(100, text="Complete")
+            st.success(f"Analysis complete. **{title}** was saved to the Knowledge Base. Open Results Dashboard to review it.")
 
     elif analyze_clicked:
         st.error("Please paste a meeting transcript first.")
@@ -1134,14 +1304,14 @@ if page == "🏠 Analyze Meeting":
 #  PAGE: RESULTS DASHBOARD
 # ═══════════════════════════════════════════
 
-elif page == "📊 Results Dashboard":
+elif page == "Results Dashboard":
     result = st.session_state.get("current_result")
     title = st.session_state.get("current_title", "Meeting Results")
 
     if not result:
         st.markdown("""
         <div class="empty-state">
-            <div class="icon">📊</div>
+            <div class="icon">No results</div>
             <p>No analysis results yet.<br>Go to <strong>Analyze Meeting</strong> to process a transcript.</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1149,6 +1319,12 @@ elif page == "📊 Results Dashboard":
         st.markdown(f'<h1 class="hero-header">{title}</h1>', unsafe_allow_html=True)
         st.markdown('<p class="hero-sub">Summary, decisions, action items, and risks from this meeting.</p>', unsafe_allow_html=True)
         st.caption("Use this page to understand what was discussed and what needs to happen next.")
+        detected = result.get("detected_language", {})
+        st.info(
+            f"Input language: {result.get('input_language', detected.get('language', 'Unknown'))} · "
+            f"Detected: {detected.get('language', 'Unknown')} ({detected.get('confidence', 'low')} confidence) · "
+            f"Output: {result.get('output_language', 'English')}"
+        )
 
         # Stats bar
         stats = result.get("stats", {})
@@ -1178,10 +1354,24 @@ elif page == "📊 Results Dashboard":
             st.markdown('</div>', unsafe_allow_html=True)
         with sum_tabs[3]:
             llm_s = result.get("llm_summary")
-            if llm_s:
+            translated = result.get("translated_summary")
+            if translated:
+                st.markdown(f'<div class="glass-card">{translated}</div>', unsafe_allow_html=True)
+            elif llm_s:
                 st.markdown(f'<div class="glass-card">{llm_s}</div>', unsafe_allow_html=True)
             else:
                 st.info("Enable Ollama LLM during analysis for AI-enhanced summaries.")
+
+        with st.expander("Original transcript and timestamps"):
+            segments = result.get("transcript_segments", [])
+            if segments:
+                for segment in segments:
+                    st.markdown(
+                        f"**[{segment['start']} - {segment['end']}] {segment.get('speaker', 'Unknown')}:** "
+                        f"{segment['text']}"
+                    )
+            else:
+                st.text_area("Original transcript", st.session_state.get("current_transcript", ""), height=260, disabled=True)
 
         st.divider()
 
@@ -1369,7 +1559,7 @@ elif page == "📊 Results Dashboard":
 #  PAGE: MEETINGS
 # ═══════════════════════════════════════════
 
-elif page == "📅 Meetings":
+elif page == "Meetings":
     st.markdown('<h1 class="hero-header">Meetings</h1>', unsafe_allow_html=True)
     st.markdown('<p class="hero-sub">Your complete meeting history. Open a meeting to review its analysis.</p>', unsafe_allow_html=True)
 
@@ -1403,10 +1593,53 @@ elif page == "📅 Meetings":
 
 
 # ═══════════════════════════════════════════
+#  PAGE: CALENDAR
+# ═══════════════════════════════════════════
+
+elif page == "Calendar":
+    st.markdown('<h1 class="hero-header">Calendar</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">Turn deadlines and follow-ups into reminders you can track.</p>', unsafe_allow_html=True)
+
+    with st.form("calendar_event_form"):
+        title = st.text_input("Event title", placeholder="e.g., Submit project report")
+        event_date = st.date_input("Date")
+        event_time = st.time_input("Time", value=datetime.strptime("09:00", "%H:%M").time())
+        description = st.text_area("Description", height=90)
+        assignee = st.text_input("Assignee", value=current_user["name"])
+        reminder = st.selectbox("Reminder", {"No reminder": None, "1 hour before": 60, "1 day before": 1440}.keys())
+        create_event = st.form_submit_button("Create event", type="primary")
+    if create_event:
+        if not title.strip():
+            st.error("Enter an event title.")
+        else:
+            calendar.create_event(
+                title, event_date.isoformat(), event_time.strftime("%H:%M"), description,
+                assignee, reminder_minutes={"No reminder": None, "1 hour before": 60, "1 day before": 1440}[reminder],
+            )
+            st.success("Calendar event and reminder saved.")
+            st.rerun()
+
+    events = calendar.list_events()
+    st.download_button("Download .ics calendar", calendar.export_ics(), "meetmind-calendar.ics", "text/calendar")
+    if events:
+        for event in events:
+            with st.container(border=True):
+                event_cols = st.columns([4, 2, 1])
+                event_cols[0].markdown(f"**{event['title']}**")
+                event_cols[0].caption(event["description"] or "No description")
+                event_cols[1].write(f"{event['event_date']} {event['event_time']}")
+                if event_cols[2].button("Delete", key=f"delete_event_{event['id']}"):
+                    calendar.delete_event(event["id"])
+                    st.rerun()
+    else:
+        st.info("No calendar events yet. Create one from a confirmed deadline or follow-up meeting.")
+
+
+# ═══════════════════════════════════════════
 #  PAGE: KNOWLEDGE BASE
 # ═══════════════════════════════════════════
 
-elif page == "📚 Knowledge Base":
+elif page == "Knowledge Base":
     st.markdown('<h1 class="hero-header">Knowledge Base</h1>', unsafe_allow_html=True)
     st.markdown('<p class="hero-sub">Search inside meeting transcripts, summaries, decisions, and action items.</p>', unsafe_allow_html=True)
 
@@ -1467,7 +1700,7 @@ elif page == "📚 Knowledge Base":
 #  PAGE: MEMORY ASSISTANT
 # ═══════════════════════════════════════════
 
-elif page == "🧠 Memory Assistant":
+elif page == "Memory Assistant":
     st.markdown('<h1 class="hero-header">Meeting Memory Assistant</h1>', unsafe_allow_html=True)
     st.markdown('<p class="hero-sub">Ask questions across your saved meeting history and discover what changed over time.</p>', unsafe_allow_html=True)
 
@@ -1503,7 +1736,7 @@ elif page == "🧠 Memory Assistant":
 #  PAGE: ACCOUNTABILITY CENTER
 # ═══════════════════════════════════════════
 
-elif page == "✅ Accountability Center":
+elif page == "Accountability Center":
     st.markdown('<h1 class="hero-header">Accountability Center</h1>', unsafe_allow_html=True)
     st.markdown('<p class="hero-sub">Track commitments across meetings and surface delivery risk before deadlines slip.</p>', unsafe_allow_html=True)
     tasks = get_accountability_tasks()
@@ -1544,7 +1777,7 @@ elif page == "✅ Accountability Center":
 #  PAGE: QUALITY COACH
 # ═══════════════════════════════════════════
 
-elif page == "🎯 Quality Coach":
+elif page == "Quality Coach":
     st.markdown('<h1 class="hero-header">Meeting Quality Coach</h1>', unsafe_allow_html=True)
     st.markdown('<p class="hero-sub">Turn meeting analytics into specific improvements for your next conversation.</p>', unsafe_allow_html=True)
     meetings = kb.list_meetings()
@@ -1572,7 +1805,7 @@ elif page == "🎯 Quality Coach":
 #  PAGE: ANALYTICS
 # ═══════════════════════════════════════════
 
-elif page == "📈 Analytics":
+elif page == "Analytics":
     st.markdown('<h1 class="hero-header">Analytics Dashboard</h1>', unsafe_allow_html=True)
     st.markdown('<p class="hero-sub">A simple view of meeting patterns, follow-up, and team participation.</p>', unsafe_allow_html=True)
     st.caption("Use these numbers to decide which meetings need better agendas, clearer owners, or follow-up reviews.")
@@ -1676,7 +1909,7 @@ elif page == "📈 Analytics":
 #  PAGE: GENERATE REPORT
 # ═══════════════════════════════════════════
 
-elif page == "📧 Generate Report":
+elif page == "Generate Report":
     st.markdown('<h1 class="hero-header">Generate Report</h1>', unsafe_allow_html=True)
     st.markdown('<p class="hero-sub">Auto-generate professional follow-up emails and meeting reports</p>', unsafe_allow_html=True)
 
@@ -1777,7 +2010,7 @@ elif page == "📧 Generate Report":
 #  PAGE: SETTINGS
 # ═══════════════════════════════════════════
 
-elif page == "⚙️ Settings":
+elif page == "Settings":
     st.markdown('<h1 class="hero-header">Settings</h1>', unsafe_allow_html=True)
 
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)

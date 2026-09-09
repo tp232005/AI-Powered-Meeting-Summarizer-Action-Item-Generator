@@ -78,7 +78,7 @@ class MeetingAnalyzer:
         body_text = " ".join(u["speech"] for u in utterances) if has_speakers else transcript
 
         # spaCy doc on full text
-        doc = self.nlp(body_text[:100000])  # limit for performance
+        doc = self.nlp(body_text)
 
         # Run all analysis modules
         sentences = sent_tokenize(transcript)
@@ -119,6 +119,92 @@ class MeetingAnalyzer:
             "has_speakers": has_speakers,
             "timestamp": datetime.now().isoformat(),
         }
+
+    def analyze_hierarchical(self, transcript: str, chunk_chars: int = None) -> dict:
+        """Analyze all transcript chunks, then aggregate their evidence.
+
+        This keeps long meetings complete while ensuring the expensive NLP and
+        optional LLM layers receive bounded pieces of text.
+        """
+        chunk_chars = chunk_chars or config.TRANSCRIPT_CHUNK_CHARS
+        if len(transcript) <= chunk_chars:
+            return self.analyze(transcript)
+
+        chunks = []
+        start = 0
+        while start < len(transcript):
+            end = min(start + chunk_chars, len(transcript))
+            if end < len(transcript):
+                boundary = transcript.rfind("\n", start, end)
+                if boundary > start + chunk_chars // 2:
+                    end = boundary
+            chunk_text = transcript[start:end].strip()
+            if chunk_text:
+                chunk_result = self.analyze(chunk_text)
+                if "error" not in chunk_result:
+                    chunks.append(chunk_result)
+            start = end
+
+        if not chunks:
+            return {"error": "Transcript could not be divided into analyzable sections."}
+
+        compact_context = "\n\n".join(
+            f"Chunk {index}: {chunk.get('short_summary', '')} "
+            f"Key points: {'; '.join(chunk.get('bullet_points', [])[:4])}"
+            for index, chunk in enumerate(chunks, start=1)
+        )
+        global_result = self.analyze(compact_context)
+        global_result["decisions"] = self._merge_text_items(
+            item for chunk in chunks for item in chunk.get("decisions", [])
+        )
+        global_result["tasks"] = self._merge_tasks(
+            task for chunk in chunks for task in chunk.get("tasks", [])
+        )
+        global_result["risks"] = self._merge_risks(
+            risk for chunk in chunks for risk in chunk.get("risks", [])
+        )
+        global_result["chunk_summaries"] = [
+            {"index": index, "summary": chunk.get("short_summary", "")}
+            for index, chunk in enumerate(chunks, start=1)
+        ]
+        global_result["source_chunk_count"] = len(chunks)
+        global_result["source_char_count"] = len(transcript)
+        global_result["stats"]["word_count"] = len(transcript.split())
+        return global_result
+
+    def _merge_text_items(self, items) -> list:
+        merged = []
+        for item in items:
+            if item and not any(self._jaccard(item, existing) > 0.65 for existing in merged):
+                merged.append(item)
+        return merged
+
+    def _merge_tasks(self, tasks) -> list:
+        merged = []
+        for task in tasks:
+            if not task.get("task"):
+                continue
+            duplicate = next(
+                (existing for existing in merged
+                 if self._jaccard(task["task"], existing["task"]) > 0.65),
+                None,
+            )
+            if duplicate:
+                if duplicate.get("deadline") == "Not specified" and task.get("deadline") != "Not specified":
+                    duplicate["deadline"] = task["deadline"]
+                if duplicate.get("assignee") == "Team" and task.get("assignee") != "Team":
+                    duplicate["assignee"] = task["assignee"]
+            else:
+                merged.append(dict(task))
+        return merged
+
+    def _merge_risks(self, risks) -> list:
+        merged = []
+        for risk in risks:
+            description = risk.get("description", "")
+            if description and not any(self._jaccard(description, existing.get("description", "")) > 0.65 for existing in merged):
+                merged.append(dict(risk))
+        return merged
 
     # ═══════════════════════════════════════════
     #  SPEAKER PARSING

@@ -17,7 +17,21 @@ class KnowledgeBase:
     def __init__(self, db_path: str = None):
         self.db_path = db_path or config.DB_PATH
         self._local = threading.local()   # Fix #1 & #3: thread-local storage
+        self._actor = threading.local()
         self._init_db()
+
+    def set_actor(self, user_id: int = None, organization_id: int = None):
+        """Scope subsequent reads and writes to the authenticated actor."""
+        self._actor.user_id = user_id
+        self._actor.organization_id = organization_id
+
+    def _scope(self, alias: str = "") -> tuple[str, tuple]:
+        user_id = getattr(self._actor, "user_id", None)
+        organization_id = getattr(self._actor, "organization_id", None)
+        prefix = f"{alias}." if alias else ""
+        if user_id is None:
+            return "", ()
+        return f" WHERE {prefix}user_id = ? AND {prefix}organization_id = ?", (user_id, organization_id)
 
     def _get_conn(self) -> sqlite3.Connection:
         """Return a per-thread SQLite connection (Fix #1)."""
@@ -46,6 +60,9 @@ class KnowledgeBase:
                 date TEXT NOT NULL,
                 transcript TEXT NOT NULL,
                 analysis TEXT NOT NULL,
+                user_id INTEGER REFERENCES users(id),
+                organization_id INTEGER REFERENCES organizations(id),
+                visibility TEXT NOT NULL DEFAULT 'private',
                 short_summary TEXT,
                 detailed_summary TEXT,
                 decisions_count INTEGER DEFAULT 0,
@@ -80,6 +97,14 @@ class KnowledgeBase:
                 VALUES (new.id, new.title, new.transcript, new.short_summary, new.detailed_summary);
             END;
         """)
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(meetings)")}
+        for name, definition in (
+            ("user_id", "INTEGER REFERENCES users(id)"),
+            ("organization_id", "INTEGER REFERENCES organizations(id)"),
+            ("visibility", "TEXT NOT NULL DEFAULT 'private'"),
+        ):
+            if name not in columns:
+                conn.execute(f"ALTER TABLE meetings ADD COLUMN {name} {definition}")
         conn.commit()
 
     # ── CRUD Operations ──
@@ -90,15 +115,19 @@ class KnowledgeBase:
         try:
             cursor = conn.execute(
                 """INSERT INTO meetings
-                   (title, date, transcript, analysis, short_summary, detailed_summary,
+                   (title, date, transcript, analysis, user_id, organization_id, visibility,
+                    short_summary, detailed_summary,
                     decisions_count, tasks_count, speakers_count, sentiment,
                     productivity_score, word_count)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     title,
                     analysis.get("timestamp", datetime.now().isoformat()),
                     transcript,
                     json.dumps(analysis, default=str),
+                    getattr(self._actor, "user_id", None),
+                    getattr(self._actor, "organization_id", None),
+                    analysis.get("visibility", "private"),
                     analysis.get("short_summary", ""),
                     analysis.get("detailed_summary", ""),
                     len(analysis.get("decisions", [])),
@@ -118,7 +147,9 @@ class KnowledgeBase:
     def get(self, meeting_id: int) -> Optional[dict]:
         """Get a single meeting by ID."""
         conn = self._get_conn()
-        row = conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+        scope, params = self._scope()
+        scope = scope.replace(" WHERE", " AND", 1) if scope else ""
+        row = conn.execute(f"SELECT * FROM meetings WHERE id = ?{scope}", (meeting_id, *params)).fetchone()
         if row:
             result = dict(row)
             result["analysis"] = json.loads(result["analysis"])
@@ -128,19 +159,22 @@ class KnowledgeBase:
     def list_meetings(self, limit: int = 50, offset: int = 0) -> list:
         """List all meetings, most recent first."""
         conn = self._get_conn()
+        scope, params = self._scope()
         rows = conn.execute(
             """SELECT id, title, date, short_summary, decisions_count,
                       tasks_count, speakers_count, sentiment,
                       productivity_score, word_count, created_at
-               FROM meetings ORDER BY created_at DESC LIMIT ? OFFSET ?""",
-            (limit, offset),
+               FROM meetings""" + scope + " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (*params, limit, offset),
         ).fetchall()
         return [dict(r) for r in rows]
 
     def delete(self, meeting_id: int) -> bool:
         """Delete a meeting by ID. Returns True only if a row was deleted (Fix #4)."""
         conn = self._get_conn()
-        cursor = conn.execute("DELETE FROM meetings WHERE id = ?", (meeting_id,))
+        scope, params = self._scope()
+        scope = scope.replace(" WHERE", " AND", 1) if scope else ""
+        cursor = conn.execute(f"DELETE FROM meetings WHERE id = ?{scope}", (meeting_id, *params))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -156,9 +190,11 @@ class KnowledgeBase:
             return False
         tasks[task_index]["status"] = status
         conn = self._get_conn()
+        scope, params = self._scope()
+        scope = scope.replace(" WHERE", " AND", 1) if scope else ""
         conn.execute(
-            "UPDATE meetings SET analysis = ? WHERE id = ?",
-            (json.dumps(meeting["analysis"], default=str), meeting_id),
+            f"UPDATE meetings SET analysis = ? WHERE id = ?{scope}",
+            (json.dumps(meeting["analysis"], default=str), meeting_id, *params),
         )
         conn.commit()
         return True
@@ -168,6 +204,8 @@ class KnowledgeBase:
     def search(self, query: str, limit: int = 20) -> list:
         """Full-text search across meetings."""
         conn = self._get_conn()
+        scope, params = self._scope("m")
+        scope = scope.replace(" WHERE", " AND") if scope else ""
         try:
             rows = conn.execute(
                 """SELECT m.id, m.title, m.date, m.short_summary,
@@ -176,22 +214,23 @@ class KnowledgeBase:
                           rank
                    FROM meetings_fts fts
                    JOIN meetings m ON m.id = fts.rowid
-                   WHERE meetings_fts MATCH ?
+                         WHERE meetings_fts MATCH ?""" + scope + """
                    ORDER BY rank
                    LIMIT ?""",
-                (query, limit),
+                     (query, *params, limit),
             ).fetchall()
             return [dict(r) for r in rows]
         except sqlite3.OperationalError:
             like_q = f"%{query}%"
+            fallback_scope = scope.replace("m.", "")
             rows = conn.execute(
                 """SELECT id, title, date, short_summary,
                           decisions_count, tasks_count, sentiment,
                           productivity_score, word_count
                    FROM meetings
-                   WHERE title LIKE ? OR short_summary LIKE ? OR transcript LIKE ?
+                         WHERE (title LIKE ? OR short_summary LIKE ? OR transcript LIKE ?)""" + fallback_scope + """
                    ORDER BY created_at DESC LIMIT ?""",
-                (like_q, like_q, like_q, limit),
+                     (like_q, like_q, like_q, *params, limit),
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -200,6 +239,7 @@ class KnowledgeBase:
     def get_stats(self) -> dict:
         """Aggregate stats across all meetings (Fix #5: returns safe empty dict)."""
         conn = self._get_conn()
+        scope, params = self._scope()
         row = conn.execute(
             """SELECT
                   COUNT(*) as total,
@@ -208,8 +248,9 @@ class KnowledgeBase:
                   AVG(word_count) as avg_words,
                   AVG(productivity_score) as avg_productivity,
                   SUM(speakers_count) as total_speakers
-               FROM meetings"""
-        ).fetchone()
+             FROM meetings""" + scope,
+             params,
+         ).fetchone()
 
         if not row or row["total"] == 0:
             # Fix #5: return safe empty defaults instead of None
@@ -224,14 +265,16 @@ class KnowledgeBase:
             }
 
         sentiment_rows = conn.execute(
-            "SELECT sentiment, COUNT(*) as cnt FROM meetings GROUP BY sentiment"
+            "SELECT sentiment, COUNT(*) as cnt FROM meetings" + scope + " GROUP BY sentiment",
+            params,
         ).fetchall()
         sentiments = {r["sentiment"]: r["cnt"] for r in sentiment_rows}
 
         trend_rows = conn.execute(
             """SELECT title, productivity_score, date, tasks_count, decisions_count
-               FROM meetings ORDER BY created_at DESC LIMIT 10"""
-        ).fetchall()
+             FROM meetings""" + scope + " ORDER BY created_at DESC LIMIT 10",
+             params,
+         ).fetchall()
 
         return {
             "total": row["total"],
@@ -246,8 +289,10 @@ class KnowledgeBase:
     def get_all_analyses(self) -> list:
         """Get all meeting analyses for cross-meeting analytics (Fix #7: LIMIT added)."""
         conn = self._get_conn()
+        scope, params = self._scope()
         rows = conn.execute(
-            "SELECT id, title, date, analysis, productivity_score FROM meetings ORDER BY created_at DESC LIMIT 100"
+            "SELECT id, title, date, analysis, productivity_score FROM meetings" + scope + " ORDER BY created_at DESC LIMIT 100",
+            params,
         ).fetchall()
         results = []
         for r in rows:

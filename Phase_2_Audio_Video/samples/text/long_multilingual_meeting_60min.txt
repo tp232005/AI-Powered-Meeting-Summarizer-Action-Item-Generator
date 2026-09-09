@@ -1,0 +1,60 @@
+MeetMind Synthetic Long Meeting Test Recording
+Meeting: Final Year Project Planning and Review
+Date: 2026-09-09
+Duration: approximately 60 minutes
+Participants: Rahul, Priya, Amit, Neha, Professor Sharma
+Language: English, Hindi, Marathi, and code-mixed speech
+
+[00:00:00] Rahul: Good morning everyone. Today we will review the MeetMind project status, agree on the remaining modules, and confirm the final demonstration plan.
+[00:01:20] Priya: The transcription pipeline is working for English audio. We still need to validate Hindi, Marathi, and mixed-language recordings on a longer meeting.
+[00:02:45] Amit: I tested the ten-minute chunk flow. The chunks are processed in order and the complete transcript is preserved.
+[00:04:10] Neha: We should also verify that a failed chunk can be retried without repeating all previous chunks.
+[00:05:30] Professor Sharma: Agreed. The long-meeting demonstration must show progress, timestamps, and a clear recovery path.
+[00:07:00] Rahul: We decided to use the multilingual Whisper model as the configurable local default, with a cloud provider only as an optional fallback.
+[00:08:20] Priya: I will prepare the English and Hindi test transcripts by Wednesday.
+[00:09:40] Amit: I will prepare the Marathi and code-mixed examples by Thursday.
+
+[00:10:00] Neha: आता आपण डेटाबेस आणि वापरकर्ता गोपनीयतेबद्दल चर्चा करूया. User data should remain isolated between organizations.
+[00:11:25] Rahul: The database now stores organization and user ownership for meetings. Search results also use the authenticated scope.
+[00:12:50] Professor Sharma: The privacy explanation should be included in the viva presentation. Do not claim perfect security; explain the controls and limitations.
+[00:14:15] Priya: Hindi users should be able to read the summary in Hindi without losing the original transcript.
+[00:15:30] Amit: सही है। Original transcript अलग रहेगा और output language अलग setting से चुनी जाएगी.
+[00:16:45] Neha: The system should display low confidence when Hindi and Marathi markers are ambiguous.
+[00:18:10] Rahul: We agreed that uncertain deadlines will be shown as needing confirmation instead of inventing a date.
+[00:19:35] Professor Sharma: Priya, please document the language detection limitations before Friday.
+
+[00:20:00] Rahul: Let us review the NLP results. The analyzer extracts decisions, risks, discussion topics, and action items from each transcript chunk.
+[00:21:20] Priya: Repeated tasks are merged. For example, if Rahul says he will investigate the payment issue and later confirms the fix, the result should be one task.
+[00:22:40] Amit: We also need conflict detection. If one chunk says Friday and another says Monday, the task must be flagged for review.
+[00:24:00] Neha: General suggestions should not become assigned tasks. The sentence must indicate a person or a clear commitment.
+[00:25:25] Professor Sharma: Good. Add confidence labels for explicit and inferred assignments in the final report.
+[00:26:50] Rahul: The current quality coach explains missing owners, missing deadlines, unresolved risks, and participation imbalance.
+[00:28:15] Priya: I will add examples of those recommendations to the project report.
+[00:29:30] Amit: I will test duplicate-task merging with repeated action items in the long transcript.
+
+[00:30:00] Neha: आता कॅलेंडर आणि reminders पाहूया. The confirmed deadlines should become calendar events.
+[00:31:15] Rahul: The calendar page supports event creation, reminder time, deletion, and iCalendar export.
+[00:32:30] Priya: The report submission deadline is next Tuesday. Exact date should use the meeting date as the reference.
+[00:33:45] Amit: I can create a calendar event for the report and export it to Google Calendar or Outlook.
+[00:35:00] Professor Sharma: Please ensure that one organization cannot download another organization's calendar events.
+[00:36:20] Neha: माझे task status pending आहे, but after testing I will mark it in progress.
+[00:37:40] Rahul: We decided that reminders will initially be in-app notifications. Email can remain optional for the academic version.
+[00:39:00] Priya: I will verify the ICS format on Friday and record the result in the evaluation sheet.
+
+[00:40:00] Rahul: The meeting memory assistant should retrieve evidence before answering questions.
+[00:41:15] Priya: It should show the meeting title, date, and timestamp for the evidence.
+[00:42:30] Amit: It must say that information was not found instead of guessing when no saved meeting matches.
+[00:43:45] Neha: Search should cover titles, transcripts, decisions, topics, participants, and tasks.
+[00:45:00] Professor Sharma: We decided to demonstrate a question about the payment module and show the source timestamp.
+[00:46:20] Rahul: I will prepare the memory-assistant demonstration script by Saturday.
+[00:47:40] Priya: I will review the answer for unsupported claims and mark any issue for correction.
+
+[00:50:00] Amit: For the final presentation, the flow will be upload, validation, chunking, transcription, analysis, task extraction, calendar creation, and reminder tracking.
+[00:51:20] Neha: The dashboard should show total meetings, pending tasks, overdue tasks, and upcoming calendar events.
+[00:52:40] Rahul: Authentication is now required before private meeting data is displayed. New accounts create an organization workspace.
+[00:54:00] Professor Sharma: The final report must clearly separate implemented features from optional features such as diarization and external translation services.
+[00:55:20] Priya: I will prepare the presentation slides and screenshots by Monday.
+[00:56:40] Amit: I will run the complete sixty-minute transcript test and capture processing progress.
+[00:58:00] Neha: I will review the security tests for cross-user and cross-organization access.
+[00:59:20] Professor Sharma: Final decision: freeze the demonstration scope after Monday's validation, then focus on documentation and viva preparation.
+[00:59:50] Rahul: Thank you everyone. The next review is scheduled for Monday at 10 AM.

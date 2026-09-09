@@ -72,8 +72,19 @@ class OllamaEngine:
             "Produce clear, professional meeting summaries. "
             "Focus on decisions, action items, and key outcomes."
         )
-        prompt = f"{style_instructions.get(style, style_instructions['concise'])}\n\nMeeting Transcript:\n{transcript[:8000]}"
+        prompt = f"{style_instructions.get(style, style_instructions['concise'])}\n\nMeeting Transcript:\n{transcript}"
         return self._generate(prompt, system)
+
+    def translate_text(self, text: str, output_language: str) -> str | None:
+        """Translate generated output while retaining the original transcript."""
+        if not text or output_language == "English":
+            return text
+        prompt = (
+            f"Translate the following meeting output into {output_language}. "
+            "Preserve names, dates, task meaning, and bullet structure. Return only the translation.\n\n"
+            f"{text}"
+        )
+        return self._generate(prompt, "You are a precise professional meeting translator.", temperature=0.1)
 
     # ── Enhanced Decision Extraction ──
 
@@ -84,7 +95,7 @@ class OllamaEngine:
             "Extract all firm decisions made in this meeting. "
             "Return each decision as a separate line starting with '- '. "
             "Only include actual decisions, not discussions or suggestions.\n\n"
-            f"Meeting Transcript:\n{transcript[:8000]}"
+            f"Meeting Transcript:\n{transcript}"
         )
         result = self._generate(prompt, system)
         if result:
@@ -105,7 +116,7 @@ class OllamaEngine:
             '- "deadline": when it\'s due (use "Not specified" if unclear)\n'
             '- "priority": "high", "medium", or "low"\n\n'
             "Return ONLY a JSON array of objects, no other text.\n\n"
-            f"Meeting Transcript:\n{transcript[:8000]}"
+            f"Meeting Transcript:\n{transcript}"
         )
         result = self._generate(prompt, system, temperature=0.1)
         if result:
@@ -145,7 +156,7 @@ class OllamaEngine:
             '- "severity": "high", "medium", or "low"\n'
             '- "mitigation": any suggested mitigation discussed\n\n'
             "Return ONLY a JSON array of objects, no other text.\n\n"
-            f"Meeting Transcript:\n{transcript[:8000]}"
+            f"Meeting Transcript:\n{transcript}"
         )
         result = self._generate(prompt, system, temperature=0.2)
         if result:

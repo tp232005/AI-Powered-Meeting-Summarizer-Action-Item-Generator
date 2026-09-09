@@ -20,14 +20,25 @@ LLM_API_KEY = os.getenv("LLM_API_KEY")
 DB_PATH = os.path.join(os.path.dirname(__file__), "meeting_knowledge_base.db")
 
 # ── Speech-to-Text (ASR) Configuration ──
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "openai/whisper-tiny.en")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "openai/whisper-small")
 SPEECH_TO_TEXT_PROVIDER = os.getenv("SPEECH_TO_TEXT_PROVIDER", "openai")
 AUDIO_CHUNK_SECONDS = int(os.getenv("AUDIO_CHUNK_SECONDS", "600"))
-MAX_AUDIO_FILE_SIZE_MB = int(os.getenv("MAX_AUDIO_FILE_SIZE_MB", "25"))
+MAX_AUDIO_FILE_SIZE_MB = int(os.getenv("MAX_AUDIO_FILE_SIZE_MB", "200"))
 MAX_AUDIO_FILE_SIZE_BYTES = MAX_AUDIO_FILE_SIZE_MB * 1024 * 1024
 SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".mp4", ".webm", ".ogg", ".flac", ".mov", ".mkv", ".avi"}
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
+
+# Keep language choices in one place so UI, transcription, and output generation
+# can evolve without scattering language-specific conditionals through the app.
+SUPPORTED_LANGUAGES = {
+    "Auto Detect": None,
+    "English": "en",
+    "Hindi": "hi",
+    "Marathi": "mr",
+}
+DEFAULT_OUTPUT_LANGUAGE = os.getenv("DEFAULT_OUTPUT_LANGUAGE", "English")
+TRANSCRIPT_CHUNK_CHARS = int(os.getenv("TRANSCRIPT_CHUNK_CHARS", "12000"))
 
 # ── NLP Parameters ──
 SHORT_SUMMARY_SENTENCES = 3

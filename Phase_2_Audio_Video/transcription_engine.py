@@ -4,6 +4,7 @@ Supports secure audio validation, optional OpenAI transcription,
 and a local Whisper fallback for the existing project workflow.
 """
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -120,24 +121,62 @@ class TranscriptionEngine:
         segment_paths: list[str] = []
         chunk_count = 0
 
+        # Use soundfile directly for PCM-style formats. This avoids MoviePy's
+        # external reader process and is reliable for long WAV test recordings.
+        if os.path.splitext(file_path)[1].lower() in {".wav", ".flac", ".ogg"}:
+            try:
+                with sf.SoundFile(file_path) as source:
+                    total_frames = len(source)
+                    sample_rate = source.samplerate
+                    frames_per_chunk = max_duration_sec * sample_rate
+                    for start_frame in range(0, total_frames, frames_per_chunk):
+                        source.seek(start_frame)
+                        audio = source.read(frames_per_chunk, dtype="float32", always_2d=False)
+                        segment_path = os.path.join(
+                            config.TEMP_DIR,
+                            f"segment_{uuid.uuid4().hex}_{chunk_count}.wav",
+                        )
+                        sf.write(segment_path, audio, sample_rate, subtype="PCM_16")
+                        segment_paths.append(segment_path)
+                        chunk_count += 1
+                return segment_paths or [file_path]
+            except Exception as exc:
+                for segment_path in segment_paths:
+                    try:
+                        os.remove(segment_path)
+                    except OSError:
+                        pass
+                raise ValueError(f"Unable to segment the audio file for processing: {exc}") from exc
+
         try:
             from moviepy.audio.io.AudioFileClip import AudioFileClip
 
             clip = AudioFileClip(file_path)
             total_duration = float(clip.duration)
-            clip.close()
+            segment_method = getattr(clip, "subclipped", None) or getattr(clip, "subclip", None)
+            if segment_method is None:
+                raise ValueError("The installed MoviePy version does not support audio segmentation.")
 
             for start in range(0, int(total_duration), max_duration_sec):
                 end = min(start + max_duration_sec, total_duration)
                 segment_path = os.path.join(config.TEMP_DIR, f"segment_{uuid.uuid4().hex}_{chunk_count}.wav")
-                clip = AudioFileClip(file_path)
-                chunk = clip.subclip(start, end)
+                chunk = segment_method(start, end)
                 chunk.write_audiofile(segment_path, fps=16000, codec='pcm_s16le', logger=None)
                 chunk.close()
-                clip.close()
                 segment_paths.append(segment_path)
                 chunk_count += 1
+            clip.close()
         except Exception as exc:
+            try:
+                clip.close()
+            except (UnboundLocalError, AttributeError):
+                pass
+            for segment_path in segment_paths:
+                if os.path.exists(segment_path):
+                    try:
+                        os.remove(segment_path)
+                    except OSError:
+                        pass
             raise ValueError(f"Unable to segment the audio file for processing: {exc}") from exc
 
         if not segment_paths:
@@ -216,6 +255,87 @@ class TranscriptionEngine:
         if not combined_text.strip():
             raise ValueError("The audio file produced an empty transcript after processing. Please ensure the recording is valid and audible.")
         return combined_text.strip()
+
+    @staticmethod
+    def detect_language(text: str) -> dict:
+        """Detect the supported meeting language without destroying the source text.
+
+        Whisper remains the source of truth for audio language detection. This
+        lightweight fallback is useful for pasted transcripts and offline mode.
+        """
+        text = text or ""
+        devanagari = len(re.findall(r"[\u0900-\u097F]", text))
+        latin = len(re.findall(r"[A-Za-z]", text))
+        if devanagari:
+            marathi_markers = ("आहे", "आणि", "करू", "करणार", "करेल", "पर्यंत", "मध्ये", "साठी")
+            hindi_markers = ("है", "और", "करेगा", "करेंगे", "तक", "में", "के लिए")
+            marathi_score = sum(text.count(marker) for marker in marathi_markers)
+            hindi_score = sum(text.count(marker) for marker in hindi_markers)
+            if marathi_score > hindi_score:
+                return {"language": "Marathi", "code": "mr", "confidence": "high"}
+            if hindi_score > marathi_score:
+                return {"language": "Hindi", "code": "hi", "confidence": "high"}
+            return {"language": "Hindi/Marathi", "code": "hi-mr", "confidence": "low"}
+        if latin:
+            return {"language": "English", "code": "en", "confidence": "medium"}
+        return {"language": "Unknown", "code": "unknown", "confidence": "low"}
+
+    @staticmethod
+    def _timestamp(seconds: float) -> str:
+        total = max(0, int(seconds))
+        hours, remainder = divmod(total, 3600)
+        minutes, secs = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+    def transcribe_file_detailed(self, file_path: str, model_name: str = None) -> dict:
+        """Transcribe every chronological chunk and retain source timestamps.
+
+        The returned transcript is the complete source transcript. Chunk metadata
+        is additive, so callers that only need the old string API can still use
+        ``transcribe_file`` unchanged.
+        """
+        self.validate_audio_file(file_path)
+        duration = self._estimate_duration(file_path)
+        chunk_paths = self._segment_audio_file(
+            file_path, config.AUDIO_CHUNK_SECONDS
+        ) if duration > config.AUDIO_CHUNK_SECONDS else [file_path]
+        chunks = []
+        try:
+            for index, chunk_path in enumerate(chunk_paths):
+                if config.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY") or os.getenv("SPEECH_TO_TEXT_API_KEY"):
+                    try:
+                        text = self._transcribe_with_openai(chunk_path)
+                    except Exception:
+                        text = self._transcribe_local_whisper(chunk_path, model_name)
+                else:
+                    text = self._transcribe_local_whisper(chunk_path, model_name)
+                start = index * config.AUDIO_CHUNK_SECONDS
+                end = min(start + config.AUDIO_CHUNK_SECONDS, duration) if duration else start
+                chunks.append({
+                    "speaker": "Unknown",
+                    "start": self._timestamp(start),
+                    "end": self._timestamp(end),
+                    "text": text.strip(),
+                })
+        finally:
+            for chunk_path in chunk_paths:
+                if chunk_path != file_path and os.path.exists(chunk_path):
+                    try:
+                        os.remove(chunk_path)
+                    except OSError:
+                        pass
+
+        segments = [chunk for chunk in chunks if chunk["text"]]
+        transcript = "\n\n".join(chunk["text"] for chunk in segments).strip()
+        if not transcript:
+            raise ValueError("The audio file produced an empty transcript. Please check the recording quality and try again.")
+        return {
+            "transcript": transcript,
+            "segments": segments,
+            "duration_seconds": duration,
+            "detected_language": self.detect_language(transcript),
+            "chunk_count": len(segments),
+        }
 
     def transcribe_file(self, file_path: str, model_name: str = None) -> str:
         """Process the uploaded audio/video file and return a transcript for the existing summarization pipeline."""
