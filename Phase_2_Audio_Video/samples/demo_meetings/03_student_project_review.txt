@@ -1,0 +1,13 @@
+Student Team Project Review
+
+Maya: We have two weeks before the class presentation. Can we check the prototype and split the remaining work?
+Leo: The main screens are complete, and the login flow works. The data page still uses sample information.
+Maya: The instructor asked us to show a real example, so that page is important.
+Leo: I can connect it to the shared project file, but I need the final column names first.
+Amir: I will clean the file and send the column list tonight. I can also test the charts once the connection is ready.
+Maya: Thanks. I will write the presentation outline and send it to the team by Friday.
+Leo: I can finish the data connection by Monday, provided the file arrives tonight.
+Amir: I will also check that the charts have readable labels on the classroom projector.
+Maya: Let's agree on a full rehearsal next Tuesday at four. Our risk is losing time if the file changes after Leo starts.
+Amir: I'll mark the data file as final when I send it and tell everyone if anything changes.
+Maya: Great. Amir owns the data and chart check, Leo owns the connection, and I own the outline and rehearsal invite. We will review progress on Monday.

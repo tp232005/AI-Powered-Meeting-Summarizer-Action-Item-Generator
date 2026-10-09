@@ -1438,6 +1438,11 @@ if page == "Analyze Meeting":
             help="The recording is normalized, chunked, transcribed, and then analyzed.",
             key=f"{input_mode.lower().replace(' ', '_')}_uploader",
         )
+        if not is_video:
+            st.caption(
+                "Try the four short and one ~10-minute English demo recordings in "
+                "`Phase_2_Audio_Video/samples/demo_meetings/`."
+            )
 
     if uploaded_file is not None:
         col_u1, col_u2 = st.columns([3, 1])

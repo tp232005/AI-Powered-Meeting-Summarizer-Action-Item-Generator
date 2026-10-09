@@ -1,0 +1,12 @@
+Product Launch Stand-up
+
+Sarah: Good morning. We have four days before the release candidate review. What is the current status?
+James: The payment flow passed testing yesterday. The account recovery fix is ready, but it still needs a security review.
+Priya: The launch email is drafted. I am waiting for the final release date before scheduling it.
+Sarah: Let's keep Friday as our target, but only if the security review passes by Wednesday afternoon.
+James: That is a dependency. I will ask Nina to review the fix today and post the result in the project channel by three tomorrow.
+Priya: If it passes, I can schedule the email and update the help page on Thursday.
+Sarah: Good. One risk is that our support team has not seen the new recovery flow.
+James: I can record a short walkthrough after the review.
+Priya: I'll invite support to a twenty-minute demo Thursday morning.
+Sarah: Agreed. We will keep the Friday release target conditional on security approval, and support gets a walkthrough first. James owns the review follow-up; Priya owns the customer materials. Please flag any blocker in the channel before our next check-in.

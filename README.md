@@ -50,6 +50,15 @@ The readiness score is a transparent heuristic based on detected analysis signal
 - Premium dark dashboard with KPI cards and Plotly visualizations.
 - English-only application workflow and English Whisper model by default.
 
+## Demo recordings
+
+Five original, synthetic-English meeting recordings with matching transcripts
+are available in [`Phase_2_Audio_Video/samples/demo_meetings/`](./Phase_2_Audio_Video/samples/demo_meetings/):
+four short meetings (each under two minutes) and one approximately ten-minute
+meeting. Use them to demonstrate transcript generation, structured analysis,
+and long-recording processing. See the folder's README for the recording list
+and upload steps.
+
 ## Project flow
 
 The following diagram shows the normal path from meeting input to follow-up:
@@ -144,7 +153,7 @@ Run these commands from the repository root:
 ```powershell
 py -3.10 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r .\Phase_2_Audio_Video\requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r .\requirements.txt
 Copy-Item .env.example .env
 .\.venv\Scripts\python.exe -m streamlit run .\Phase_2_Audio_Video\app.py
 ```
@@ -165,7 +174,7 @@ Run from the repository root:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r Phase_2_Audio_Video/requirements.txt
+python -m pip install -r requirements.txt
 cp .env.example .env
 python -m streamlit run Phase_2_Audio_Video/app.py
 ```
@@ -204,7 +213,7 @@ Supported recording extensions are configured in `Phase_2_Audio_Video/config.py`
 .
 ├── README.md
 ├── .env.example
-├── requirements.txt                    # Empty root-level placeholder
+├── requirements.txt                    # Root installer for Phase 2 dependencies
 ├── Phase_1_Text_Based/                 # Earlier text-based project phase
 │   ├── README.md
 │   ├── requirements.txt

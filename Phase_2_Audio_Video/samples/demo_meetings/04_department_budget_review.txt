@@ -1,0 +1,14 @@
+Department Budget Review
+
+Elena: Thanks for meeting. We need to make a recommendation on next term's equipment budget by the end of this week.
+Marcus: The laptop replacement quote is twelve percent higher than last year. The supplier says prices are valid only until Friday.
+Elena: Do we have enough information to decide today?
+Ravi: We have the quote, but we do not yet have the updated inventory count. Some laptops may be reusable.
+Marcus: I can check the equipment register this afternoon and identify devices that can be repaired instead of replaced.
+Elena: Please include the repair cost and the number of students affected. The finance committee needs both figures.
+Ravi: I will prepare a comparison of buying new devices and repairing the current ones by Thursday morning.
+Elena: Then we should not approve the full purchase today. Let's agree to review the comparison on Thursday and submit the recommendation Friday.
+Marcus: That works, but the supplier may not hold the price after Friday.
+Elena: Record that as a risk. I will ask the supplier for a short extension and update everyone tomorrow.
+Ravi: I will send the comparison to both of you before the review.
+Elena: Good. Marcus owns the inventory check, Ravi owns the cost comparison, and I own the supplier extension. We will decide after we see the numbers.

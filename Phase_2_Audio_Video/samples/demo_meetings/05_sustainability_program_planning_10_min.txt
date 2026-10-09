@@ -1,0 +1,59 @@
+Sustainability Program Planning Meeting
+
+Maya: Thanks for joining our planning session. Today we need to turn the sustainability proposal into a practical twelve-week program for our campus and offices. We should leave with a small set of measurable goals, clear owners, a realistic budget, and a way to report progress. I suggest we start with the energy audit, then discuss waste and transportation, and finish with communications and risks. Does anyone need another item on the agenda?
+Jordan: I would add a check on data quality. Last year's electricity figures combine the library and the science building, so we cannot tell which changes worked. If we want to report credible progress, we need separate monthly readings from facilities before we announce a target.
+Priya: Agreed. I can prepare a short update for staff and student groups, but I do not want to publish a number until facilities confirms the baseline. We should explain what we are measuring and give people a simple way to share ideas.
+
+Maya: Let's begin with energy. Jordan, what did the initial walk-through show?
+Jordan: The library lights and air conditioning are running overnight on several floors. Facilities thinks an updated timer schedule could reduce waste without affecting evening study. They need two weeks to inspect the controls and confirm the safe settings.
+Alex: The science building is different because some equipment must stay powered for experiments. We should not apply the same schedule everywhere. Could we test the timer changes in the library first and compare readings for a month?
+Jordan: Yes. We can record the current usage for two weeks, change the schedule, then compare the following four weeks. I will ask facilities for a building-level baseline and a written list of exceptions by next Wednesday.
+Maya: That gives us a clear pilot. Let's set an initial target of reducing overnight library energy use by eight percent, but make the target provisional until we confirm the baseline. Jordan owns the measurement plan and the facilities check.
+Priya: I will phrase the public update as a pilot, not a campus-wide result. That keeps expectations honest while we gather evidence.
+
+Maya: Next, waste and recycling. Alex, can you summarize what we know?
+Alex: The dining hall has recycling bins near the exits, but students often put food containers in the paper stream. The signs are small, and there is no clear bin for compostable leftovers. Before we buy new bins, we should check what the waste contractor actually accepts.
+Priya: I can run a quick survey and observe the bins at lunchtime for three days. That will tell us whether the issue is confusing signs, bin placement, or materials that cannot be recycled locally.
+Jordan: The contractor can send an updated accepted-materials list. I will request that document and ask whether the dining hall can collect food scraps separately. I should have an answer by Friday.
+Maya: Good. Priya, please share the survey questions before sending them, so we do not ask students for personal information we do not need. We will keep it anonymous and only ask about bin use and suggestions.
+Priya: Understood. I will send the draft tomorrow and keep it to five questions. Once Jordan confirms the contractor's rules, I can prepare signs using plain language and simple examples.
+Alex: Could we test the signs for one week in the dining hall and compare contamination before and after? Facilities already checks the waste area on Fridays.
+Maya: Yes, as long as the facilities team can record the results consistently. Let's ask them to use the same categories each week and not rely on a visual guess when the bag cannot be checked safely.
+
+Maya: Transportation is the third area. What is a useful first step?
+Priya: The staff travel survey from last year is too old, and commuter patterns change each term. We could ask for an optional, anonymous travel survey during registration. Questions can cover broad modes such as bus, bicycle, walking, and carpool.
+Alex: The bus service is limited after six in the evening, which matters for people with late classes. We should not promise that a campaign alone will solve that. It may be useful to share current routes and ask the city about a later service.
+Jordan: I can contact the transportation office and request current route information. I will also check whether there are secure bicycle racks near the two busiest entrances. I can send both findings next Friday.
+Maya: Let's make access part of the discussion. Any recommendation has to work for people with disabilities, evening students, and staff who cannot change their commute. The survey should be voluntary, and we should report only combined results.
+Priya: I can draft that language and include a question asking what would make lower-impact travel more practical. We can present the results as options to explore, not as a judgment about individual choices.
+Alex: For the city request, we need evidence that an evening route has demand. If the survey is ready before the community meeting, we can bring a summary of the combined answers.
+
+Maya: Let's talk about budget and sequencing. We have a small pilot budget, not enough to replace every light or purchase bins for every building.
+Jordan: The library timer inspection is mainly staff time, but some control repairs may cost money. I recommend we get a written estimate before committing to the change. Facilities can provide one by Tuesday.
+Alex: The contractor may provide the recycling guidance at no charge, but any new containers would need an approved purchase. We should test existing bins and signs first.
+Priya: Printing a limited set of signs is inexpensive. I will get a quote for recycled paper and digital versions, then share both options. We can use existing screens and newsletters for most announcements.
+Maya: Agreed. We will approve the small pilot expenses only after seeing the estimates. I will keep a shared budget sheet and confirm which cost center can pay for printing. No one should place an order before the approval is recorded.
+Jordan: There is a dependency here: if the facilities repair estimate is high, we may need to move the library pilot later in the term. That could affect the twelve-week schedule.
+Maya: Please mark that as a schedule risk. We can keep the measurement and survey work moving while the estimate is reviewed, but we should not claim energy savings until the pilot has actually run.
+
+Priya: For communications, I suggest a short launch note with the purpose, the three pilot areas, and dates for feedback. It should say what is still being investigated, especially the energy baseline and accepted recycling materials.
+Alex: Could we include a monthly dashboard? People will ask whether the program is making a difference. I would like to show energy readings, waste checks, survey participation, and open questions in one place.
+Jordan: We can publish a simple monthly update, but some measures will arrive at different times. Energy readings are monthly, the waste check is weekly, and the travel survey is a one-time snapshot. The chart should show the reporting period and source for each measure.
+Maya: That's important. We should distinguish completed work from estimated impact. Priya can write the update, and Jordan can verify the figures with facilities before anything is published.
+Priya: I will prepare a draft with a small status section for each pilot and a clear note about data sources. I can send it to the team by next Monday.
+Alex: I can review whether the measures are understandable to someone who was not in this meeting. If a chart needs a long explanation, we should simplify it.
+
+Maya: We should cover risks before assigning final dates. I have four: delayed facilities data, unclear recycling rules, low survey participation, and budget approval arriving late. Are we missing anything?
+Jordan: Staff availability is another one. Facilities has a maintenance schedule, so the pilot inspection may be delayed if urgent building work comes first. I will ask for a backup week when I request the estimate.
+Priya: Low participation could make the travel survey less representative. We can share it through several channels, leave it open for two weeks, and state clearly that it is optional. We should not treat a small response as the view of the whole campus.
+Alex: A communications risk is making a promise before we can measure it. Let's have one person check every public target and make sure it is described as provisional or verified.
+Maya: I will own that review. For each risk, let's capture an owner and a date to check it, rather than just leaving a list in the notes. Jordan owns facilities data and the schedule backup; Priya owns survey reach and communications; Alex owns measurement clarity.
+
+Maya: I will summarize the decisions. We will run a library energy pilot only after facilities confirms the baseline, safe timer settings, and repair estimate. We will test clearer dining hall recycling signs after Jordan receives the contractor's accepted-materials list. We will prepare an optional, anonymous travel survey and use combined findings to inform a discussion with the transportation office.
+Alex: We also agreed not to spend pilot money before receiving estimates and approval. Each measure needs a source and a reporting period, and estimated impacts must be labeled clearly.
+Priya: My next steps are to share the five-question survey draft tomorrow, get print and digital sign costs, and prepare the launch note by next Monday. I will keep the language open about anything we have not verified.
+Jordan: I will request the energy baseline, controls inspection, and cost estimate by tomorrow; contact the waste contractor by Friday; and send the route and bicycle rack findings next Friday. I will put any delay in the shared tracker.
+Maya: I will set up the budget sheet, review public claims, and schedule a twenty-minute check-in for next Thursday. Before that call, each owner should add a status and flag any dependency that could move the pilot dates.
+Alex: One final suggestion: let's save the current measurement definitions so we do not change categories halfway through the program. That will make the monthly comparisons more useful.
+Maya: Good point. Alex, please draft the one-page measurement guide by Friday. We will review it at the check-in. Thanks, everyone. We have a plan, named owners, and clear conditions for starting each pilot. If the baseline or approvals slip, update the tracker promptly and we will adjust the schedule rather than report unverified progress.
+Maya: Before we close, let's confirm what we will review next week: the verified energy baseline, the waste sign test, survey responses, and approved costs. If a dependency changes the schedule, update the tracker and let the group know early. I will circulate the notes this afternoon. Thanks, everyone.
