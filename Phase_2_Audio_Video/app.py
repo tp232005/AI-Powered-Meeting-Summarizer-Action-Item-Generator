@@ -10,6 +10,13 @@ import json
 import os
 import re
 
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+except ImportError:  # pragma: no cover - optional retrieval enhancement
+    TfidfVectorizer = None
+    cosine_similarity = None
+
 import config
 from nlp_engine import MeetingAnalyzer
 from llm_engine import OllamaEngine
@@ -139,6 +146,124 @@ st.markdown("""
         max-width: 780px;
         margin-bottom: 1.8rem;
         line-height: 1.6;
+    }
+    .executive-panel {
+        background: linear-gradient(135deg, rgba(17, 24, 39, 0.96), rgba(13, 18, 28, 0.9));
+        border: 1px solid rgba(105, 224, 189, 0.15);
+        border-radius: 18px;
+        padding: 1.1rem 1.25rem;
+        margin: 0.5rem 0 1.3rem;
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22);
+    }
+    .executive-panel .eyebrow {
+        color: var(--mint) !important;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 0.71rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+    .executive-panel p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+    }
+    .kpi-shell {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin: 1rem 0 1.6rem;
+    }
+    .metric-card {
+        background: linear-gradient(180deg, rgba(17, 24, 39, 0.9), rgba(13, 18, 28, 0.96));
+        border: 1px solid rgba(130, 148, 176, 0.18);
+        border-radius: 16px;
+        padding: 1rem 1.1rem;
+        min-height: 110px;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+    }
+    .metric-card::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto auto 0;
+        width: 120px;
+        height: 100%;
+        background: linear-gradient(135deg, rgba(105, 224, 189, 0.12), transparent);
+        pointer-events: none;
+    }
+    .metric-card.accent-green::before { background: linear-gradient(135deg, rgba(52, 211, 153, 0.12), transparent); }
+    .metric-card.accent-sky::before { background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), transparent); }
+    .metric-card.accent-amber::before { background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), transparent); }
+    .metric-card.accent-rose::before { background: linear-gradient(135deg, rgba(244, 114, 182, 0.12), transparent); }
+    .metric-card .value {
+        font-size: clamp(1.4rem, 2vw, 2rem);
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        color: #edf4f1;
+        position: relative;
+    }
+    .metric-card .label {
+        margin-top: 0.45rem;
+        color: #9fb0be;
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        position: relative;
+    }
+    .chart-shell {
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.75));
+        border: 1px solid rgba(128, 150, 171, 0.18);
+        border-radius: 18px;
+        padding: 1rem 1rem 0.5rem;
+        box-shadow: 0 18px 30px rgba(15, 23, 42, 0.12);
+    }
+    .insight-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.45rem 0.8rem;
+        border-radius: 999px;
+        background: rgba(105, 224, 189, 0.1);
+        border: 1px solid rgba(105, 224, 189, 0.18);
+        color: #c7f7eb;
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin: 1.5rem 0 2rem;
+    }
+    .feature-card {
+        background: rgba(16, 29, 43, 0.92);
+        border: 1px solid rgba(105, 224, 189, 0.18);
+        border-radius: 14px;
+        padding: 1rem 1.1rem;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
+    }
+    .feature-card .feature-kicker {
+        font-size: 0.72rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--mint);
+        font-weight: 700;
+        margin-bottom: 0.55rem;
+    }
+    .feature-card h3 {
+        color: #edf4f1;
+        font-size: 1.06rem;
+        margin: 0 0 0.4rem;
+    }
+    .feature-card p {
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
+        margin: 0;
     }
 
     /* ── Glass Cards ── */
@@ -810,7 +935,31 @@ def render_authentication():
     st.markdown('<div class="auth-intro">', unsafe_allow_html=True)
     st.markdown('<div class="top-shell"><div><div class="breadcrumb">MEETMIND WORKSPACE</div><div class="shell-title">Meeting intelligence platform</div></div><div class="shell-actions"><span class="engine-dot"></span><span>Private workspace</span></div></div>', unsafe_allow_html=True)
     st.markdown('<h1 class="hero-header">Bring every meeting into focus.</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">A secure workspace for multilingual transcripts, decisions, action items, deadlines and institutional memory.</p>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">A secure workspace for decision tracking, action accountability, and institutional memory in English.</p>', unsafe_allow_html=True)
+    st.markdown('''
+    <div class="feature-grid">
+        <div class="feature-card">
+            <div class="feature-kicker">Decision capture</div>
+            <h3>Clear outcomes</h3>
+            <p>Turn discussion into decisions, owners, and next steps that teams can act on immediately.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-kicker">Accountability</div>
+            <h3>Follow-up tracking</h3>
+            <p>Monitor tasks, deadlines, ownership, and overdue risk across organizations, departments, and classes.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-kicker">Institutional memory</div>
+            <h3>Smart recall</h3>
+            <p>Search previous meetings and surface key decisions, action items, and context for faster follow-through.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-kicker">Risk radar</div>
+            <h3>Dependency readiness</h3>
+            <p>Flag blockers, dependencies, and execution risk before they derail a deadline, decision, or team commitment.</p>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
     sign_in, sign_up = st.tabs(["Sign in", "Create account"])
     with sign_in:
@@ -852,13 +1001,27 @@ calendar.set_actor(current_user["id"], current_user["organization_id"])
 
 # ── Plotly Dark Theme ──
 PLOTLY_LAYOUT = dict(
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(family="Inter", color="#94a3b8"),
-    margin=dict(l=40, r=20, t=40, b=40),
-    xaxis=dict(gridcolor="rgba(124,58,237,0.08)", zerolinecolor="rgba(124,58,237,0.08)"),
-    yaxis=dict(gridcolor="rgba(124,58,237,0.08)", zerolinecolor="rgba(124,58,237,0.08)"),
+    template="plotly_dark",
+    paper_bgcolor="rgba(8, 15, 22, 0.72)",
+    plot_bgcolor="rgba(8, 15, 22, 0.72)",
+    font=dict(family="Inter, Segoe UI, sans-serif", color="#dfeaf4"),
+    margin=dict(l=32, r=20, t=28, b=28),
+    legend=dict(orientation="h", y=1.15, x=0.02, font=dict(size=11), bgcolor="rgba(0,0,0,0)"),
+    xaxis=dict(gridcolor="rgba(148, 163, 184, 0.12)", zerolinecolor="rgba(148, 163, 184, 0.12)", tickfont=dict(size=11)),
+    yaxis=dict(gridcolor="rgba(148, 163, 184, 0.12)", zerolinecolor="rgba(148, 163, 184, 0.12)", tickfont=dict(size=11)),
+    hoverlabel=dict(font=dict(size=11)),
 )
+
+
+def apply_professional_plotly_theme(fig):
+    """Apply a premium chart theme for dashboards and analytics views."""
+    fig.update_layout(**PLOTLY_LAYOUT)
+    fig.update_traces(marker=dict(line=dict(width=0)), selector=dict(type="bar"))
+    fig.update_traces(marker=dict(line=dict(width=0)), selector=dict(type="scatter"))
+    fig.update_traces(textfont=dict(color="#edf4f1"), selector=dict(type="pie"))
+    fig.update_traces(hovertemplate="%{x}: %{y}<extra></extra>", selector=dict(type="bar"))
+    fig.update_traces(hovertemplate="%{label}: %{percent}%<extra></extra>", selector=dict(type="pie"))
+    return fig
 
 
 def safe_read_uploaded_audio(uploaded_file):
@@ -889,9 +1052,9 @@ def safe_read_uploaded_audio(uploaded_file):
 
 
 def retrieve_memory_matches(query: str, limit: int = 5) -> list:
-    """Rank saved meetings by overlap with the user's question."""
+    """Rank saved meetings with TF-IDF similarity and a deterministic fallback."""
     terms = set(re.findall(r"[a-z0-9]{3,}", query.lower()))
-    matches = []
+    records = []
     for meeting in kb.list_meetings(limit=100):
         full = kb.get(meeting["id"])
         if not full:
@@ -905,11 +1068,30 @@ def retrieve_memory_matches(query: str, limit: int = 5) -> list:
             " ".join(task.get("task", "") for task in tasks),
             " ".join(decisions),
         ]).lower()
-        score = sum(searchable.count(term) for term in terms)
-        if score:
-            matches.append((score, full))
-    matches.sort(key=lambda item: (item[0], item[1].get("date", "")), reverse=True)
-    return [meeting for _, meeting in matches[:limit]]
+        records.append((searchable, full))
+
+    if not records:
+        return []
+
+    scored = []
+    if TfidfVectorizer is not None and cosine_similarity is not None:
+        try:
+            vectorizer = TfidfVectorizer(stop_words="english", ngram_range=(1, 2))
+            matrix = vectorizer.fit_transform([query] + [text for text, _ in records])
+            similarities = cosine_similarity(matrix[0:1], matrix[1:]).ravel()
+            scored = [(float(score), meeting) for score, (_, meeting) in zip(similarities, records) if score > 0]
+        except ValueError:
+            scored = []
+
+    if not scored:
+        scored = [
+            (sum(searchable.count(term) for term in terms), meeting)
+            for searchable, meeting in records
+            if terms and sum(searchable.count(term) for term in terms)
+        ]
+
+    scored.sort(key=lambda item: (item[0], item[1].get("date", "")), reverse=True)
+    return [meeting for _, meeting in scored[:limit]]
 
 
 def answer_memory_question(query: str, meetings: list) -> str:
@@ -1117,13 +1299,101 @@ st.markdown(f"""
 # ═══════════════════════════════════════════
 
 def render_metric_row(metrics):
-    """Render a row of beautiful metric cards."""
+    """Render a premium KPI row with polished highlight cards."""
     cols_html = ""
     accents = ["", "accent-green", "accent-sky", "accent-amber", "accent-rose", ""]
     for i, (val, label) in enumerate(metrics):
         accent = accents[i % len(accents)]
         cols_html += f'<div class="metric-card {accent}"><div class="value">{val}</div><div class="label">{label}</div></div>'
-    st.markdown(f'<div class="metric-row">{cols_html}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi-shell">{cols_html}</div>', unsafe_allow_html=True)
+
+
+def get_meeting_readiness(result: dict) -> dict:
+    """Summarize whether the meeting is execution-ready and where blockers exist."""
+    tasks = result.get("tasks", []) or []
+    risks = result.get("risks", []) or []
+    decisions = result.get("decisions", []) or []
+
+    blocker_items = []
+    for risk in risks:
+        severity = str(risk.get("severity", "low")).lower()
+        description = str(risk.get("title") or risk.get("description") or risk).strip()
+        if severity in {"high", "critical"} or "block" in description.lower() or "dependency" in description.lower():
+            blocker_items.append(description)
+
+    dependency_items = []
+    for task in tasks:
+        description = str(task.get("description") or task.get("task") or task).strip()
+        if any(word in description.lower() for word in ["depends", "before", "waiting on", "blocked by", "requires"]):
+            dependency_items.append(description)
+
+    readiness_score = 100
+    readiness_score -= min(35, len(blocker_items) * 15)
+    readiness_score -= min(25, max(0, len(tasks) - 4) * 4)
+    readiness_score -= min(10, len(risks) * 2)
+    readiness_score = max(0, min(100, readiness_score))
+
+    return {
+        "score": readiness_score,
+        "blockers": blocker_items[:3],
+        "dependencies": dependency_items[:3],
+        "decision_count": len(decisions),
+        "task_count": len(tasks),
+        "risk_count": len(risks),
+    }
+
+
+def get_transcription_backend_status():
+    """Return the fastest available transcription backend for the current environment."""
+    backend_selector = getattr(transcriber, "get_backend_preference", None)
+    if callable(backend_selector):
+        return backend_selector()
+    if config.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY") or os.getenv("SPEECH_TO_TEXT_API_KEY"):
+        return "openai"
+    if getattr(transcriber, "_faster_whisper_model", None) is not None:
+        return "faster-whisper"
+    return "transformers"
+
+
+def run_processing_flow(transcript: str, meeting_title: str, use_llm: bool, summary_len: int):
+    """Execute the transcript pipeline with explicit staged status updates."""
+    job_status = {
+        "stage": "queued",
+        "backend": get_transcription_backend_status(),
+        "use_llm": use_llm,
+    }
+    st.session_state["processing_job"] = job_status
+
+    if job_status["backend"] == "openai":
+        backend_text = "OpenAI transcription API"
+    elif job_status["backend"] == "faster-whisper":
+        backend_text = "Local faster-whisper"
+    elif job_status["backend"] == "transformers":
+        backend_text = "Local transformers Whisper"
+    else:
+        backend_text = "No transcription backend available"
+
+    status = st.status(f"Queued transcription job\nSelected backend: {backend_text}", expanded=True)
+    status.update(label=f"Transcribing with {backend_text}...", state="running")
+    st.session_state["processing_job"]["stage"] = "transcribing"
+
+    result = analyzer.analyze_hierarchical(transcript)
+    st.session_state["processing_job"]["stage"] = "summarizing"
+    status.update(label="Structuring meeting summary and outputs...", state="running")
+
+    if use_llm and llm.is_available():
+        structured = llm.generate_structured_analysis(transcript)
+        result["structured_summary"] = structured
+        result["llm_summary"] = structured.get("summary")
+        result["llm_tasks"] = structured.get("tasks")
+        result["llm_risks"] = structured.get("risks")
+        result["llm_decisions"] = structured.get("decisions")
+
+    result["transcription_backend"] = backend_text
+    result["processing_stage"] = "complete"
+    status.update(label="Analysis complete", state="complete")
+    st.session_state["processing_job"]["stage"] = "complete"
+    return result
 
 
 # ═══════════════════════════════════════════
@@ -1142,11 +1412,8 @@ if page == "Analyze Meeting":
     with col2:
         summary_len = st.slider("Summary length", 2, 12, 5)
 
-    lang_col, output_col = st.columns(2)
-    with lang_col:
-        meeting_language = st.selectbox("Meeting language", list(config.SUPPORTED_LANGUAGES.keys()), index=0)
-    with output_col:
-        output_language = st.selectbox("Output language", ["English", "Hindi", "Marathi"], index=0)
+    meeting_language = "English"
+    output_language = "English"
 
     input_mode = st.radio(
         "Meeting input",
@@ -1246,7 +1513,7 @@ if page == "Analyze Meeting":
     # Run analysis
     if analyze_clicked and transcript.strip():
         progress = st.progress(0, text="Initializing analysis pipeline...")
-        result = analyzer.analyze_hierarchical(transcript)
+        result = run_processing_flow(transcript, meeting_title, use_llm, summary_len)
 
         if "error" in result:
             st.error(result["error"])
@@ -1269,23 +1536,39 @@ if page == "Analyze Meeting":
                     result["llm_risks"] = llm_risks
 
             detected_language = transcriber.detect_language(transcript)
-            result["input_language"] = meeting_language if meeting_language != "Auto Detect" else detected_language["language"]
+            result["input_language"] = "English"
             result["detected_language"] = detected_language
-            result["output_language"] = output_language
+            result["output_language"] = "English"
             transcription_metadata = st.session_state.get("_transcription_metadata", {})
             result["transcript_segments"] = (
                 transcription_metadata.get("segments", [])
                 if transcription_metadata.get("transcript") == transcript else []
             )
-            if output_language != "English":
-                translation_source = result.get("llm_summary") or result.get("short_summary", "")
-                translated = llm.translate_text(translation_source, output_language) if ollama_ok else None
-                if translated:
-                    result["translated_summary"] = translated
-                else:
-                    st.info("Output translation is unavailable offline; the original-language transcript and structured analysis are preserved.")
+            if not result["transcript_segments"]:
+                result["transcript_segments"] = [
+                    {
+                        "speaker": turn["speaker"],
+                        "start": "00:00:00",
+                        "end": "00:00:00",
+                        "text": turn["text"],
+                    }
+                    for turn in transcriber.parse_speaker_turns(transcript)
+                ]
+            result["diarization"] = {
+                "enabled": any(segment.get("speaker") != "Unknown" for segment in result["transcript_segments"]),
+                "source": "explicit transcript labels" if any(segment.get("speaker") != "Unknown" for segment in result["transcript_segments"]) else "unavailable",
+            }
 
-            title = meeting_title or f"Meeting {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            if meeting_title:
+                result["title"] = meeting_title
+            else:
+                result["title"] = "Untitled Meeting"
+            result["date"] = datetime.now().strftime("%Y-%m-%d")
+            result["meeting_language"] = meeting_language
+            result["summary_length"] = summary_len
+            result["analysis_mode"] = "text" if input_mode == "Text transcript" else "audio"
+
+            title = result["title"]
             st.session_state["current_result"] = result
             st.session_state["current_title"] = title
             st.session_state["current_transcript"] = transcript
@@ -1319,10 +1602,16 @@ elif page == "Results Dashboard":
         st.markdown(f'<h1 class="hero-header">{title}</h1>', unsafe_allow_html=True)
         st.markdown('<p class="hero-sub">Summary, decisions, action items, and risks from this meeting.</p>', unsafe_allow_html=True)
         st.caption("Use this page to understand what was discussed and what needs to happen next.")
+        st.markdown('''
+        <div class="executive-panel">
+            <div class="eyebrow">Executive overview</div>
+            <p>Track decisions, accountability, follow-up risk, and participation quality in one polished operating view.</p>
+        </div>
+        ''', unsafe_allow_html=True)
         detected = result.get("detected_language", {})
         st.info(
-            f"Input language: {result.get('input_language', detected.get('language', 'Unknown'))} · "
-            f"Detected: {detected.get('language', 'Unknown')} ({detected.get('confidence', 'low')} confidence) · "
+            f"Input language: {result.get('input_language', detected.get('language', 'English'))} · "
+            f"Detected: {detected.get('language', 'English')} ({detected.get('confidence', 'low')} confidence) · "
             f"Output: {result.get('output_language', 'English')}"
         )
 
@@ -1337,6 +1626,25 @@ elif page == "Results Dashboard":
             (str(len(result.get("decisions", []))), "Decisions"),
             (f"{ps.get('total', 0)}% {ps.get('grade', '')}", "Score"),
         ])
+
+        readiness = get_meeting_readiness(result)
+        st.markdown('<div class="section-header"><span class="icon">🚦</span> Meeting readiness & dependency radar</div>', unsafe_allow_html=True)
+        readiness_col, blocker_col = st.columns([2, 1])
+        with readiness_col:
+            st.markdown(f'''
+            <div class="glass-card">
+                <div class="score-badge">Execution readiness: {readiness['score']} / 100</div>
+                <p style="margin-top: 0.9rem; color: #cbd5e1;">{readiness['task_count']} tracked tasks, {readiness['decision_count']} decisions, and {readiness['risk_count']} risk signals.</p>
+            </div>
+            ''', unsafe_allow_html=True)
+        with blocker_col:
+            if readiness["blockers"]:
+                st.markdown('<div class="glass-card"><div class="feature-kicker">Critical blockers</div>', unsafe_allow_html=True)
+                for blocker in readiness["blockers"]:
+                    st.markdown(f"• {blocker}")
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="glass-card"><div class="feature-kicker">Critical blockers</div><p>No major blockers detected.</p></div>', unsafe_allow_html=True)
 
         st.divider()
 
@@ -1438,7 +1746,8 @@ elif page == "Results Dashboard":
                     color=[len(t.get("sentences", [])) for t in topics],
                     color_continuous_scale=[[0, "#4f46e5"], [0.5, "#7c3aed"], [1, "#a78bfa"]],
                 )
-                fig.update_layout(**PLOTLY_LAYOUT, height=max(200, len(topics) * 50), showlegend=False, coloraxis_showscale=False)
+                fig = apply_professional_plotly_theme(fig)
+                fig.update_layout(height=max(200, len(topics) * 50), showlegend=False, coloraxis_showscale=False)
                 fig.update_traces(marker_line_width=0)
                 st.plotly_chart(fig, use_container_width=True)
 

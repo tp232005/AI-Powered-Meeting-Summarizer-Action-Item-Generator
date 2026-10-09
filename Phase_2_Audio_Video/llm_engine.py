@@ -41,7 +41,14 @@ class OllamaEngine:
 
     # ── Core Generation ──
 
-    def _generate(self, prompt: str, system: str = "", temperature: float = 0.3) -> str | None:
+    def _generate(
+        self,
+        prompt: str,
+        system: str = "",
+        temperature: float = 0.3,
+        timeout: int | None = None,
+        response_format: str | None = None,
+    ) -> str | None:
         """Send prompt to Ollama and return response text."""
         try:
             payload = {
@@ -51,7 +58,13 @@ class OllamaEngine:
                 "stream": False,
                 "options": {"temperature": temperature, "num_predict": 2048},
             }
-            r = requests.post(self.generate_url, json=payload, timeout=config.OLLAMA_TIMEOUT)
+            if response_format:
+                payload["format"] = response_format
+            r = requests.post(
+                self.generate_url,
+                json=payload,
+                timeout=timeout or config.OLLAMA_TIMEOUT,
+            )
             if r.status_code == 200:
                 return r.json().get("response", "").strip()
         except Exception:
@@ -75,16 +88,23 @@ class OllamaEngine:
         prompt = f"{style_instructions.get(style, style_instructions['concise'])}\n\nMeeting Transcript:\n{transcript}"
         return self._generate(prompt, system)
 
-    def translate_text(self, text: str, output_language: str) -> str | None:
-        """Translate generated output while retaining the original transcript."""
-        if not text or output_language == "English":
-            return text
-        prompt = (
-            f"Translate the following meeting output into {output_language}. "
-            "Preserve names, dates, task meaning, and bullet structure. Return only the translation.\n\n"
-            f"{text}"
-        )
-        return self._generate(prompt, "You are a precise professional meeting translator.", temperature=0.1)
+    def generate_structured_analysis(self, transcript: str) -> dict:
+        """Return a structured meeting snapshot with summary, decisions, tasks, and risks."""
+        summary = self.generate_summary(transcript, "executive") or self.generate_summary(transcript, "detailed") or self.generate_summary(transcript, "concise") or ""
+        decisions = self.extract_decisions(transcript) or []
+        tasks = self.extract_tasks(transcript) or []
+        risks = self.analyze_risks(transcript) or []
+
+        return {
+            "summary": summary,
+            "decisions": decisions,
+            "tasks": tasks,
+            "risks": risks,
+            "key_points": summary.split(". ") if summary else [],
+        }
+
+    # ── English-only output: translation has been removed to keep the workflow
+    # consistent for enterprise, college, and team meeting use cases. ──
 
     # ── Enhanced Decision Extraction ──
 

@@ -11,6 +11,7 @@ except ImportError:
 OLLAMA_BASE_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 OLLAMA_TIMEOUT = 120  # seconds
+OLLAMA_TRANSLATION_TIMEOUT = int(os.getenv("OLLAMA_TRANSLATION_TIMEOUT", "45"))
 
 # ── API Keys ──
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("SPEECH_TO_TEXT_API_KEY")
@@ -20,29 +21,25 @@ LLM_API_KEY = os.getenv("LLM_API_KEY")
 DB_PATH = os.path.join(os.path.dirname(__file__), "meeting_knowledge_base.db")
 
 # ── Speech-to-Text (ASR) Configuration ──
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "openai/whisper-small")
+# Use the smallest reliable model by default to keep large meetings responsive on CPU.
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "openai/whisper-tiny.en")
 SPEECH_TO_TEXT_PROVIDER = os.getenv("SPEECH_TO_TEXT_PROVIDER", "openai")
-AUDIO_CHUNK_SECONDS = int(os.getenv("AUDIO_CHUNK_SECONDS", "600"))
-MAX_AUDIO_FILE_SIZE_MB = int(os.getenv("MAX_AUDIO_FILE_SIZE_MB", "200"))
+AUDIO_CHUNK_SECONDS = int(os.getenv("AUDIO_CHUNK_SECONDS", "180"))
+MAX_AUDIO_FILE_SIZE_MB = int(os.getenv("MAX_AUDIO_FILE_SIZE_MB", "30"))
 MAX_AUDIO_FILE_SIZE_BYTES = MAX_AUDIO_FILE_SIZE_MB * 1024 * 1024
 SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".mp4", ".webm", ".ogg", ".flac", ".mov", ".mkv", ".avi"}
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-# Keep language choices in one place so UI, transcription, and output generation
-# can evolve without scattering language-specific conditionals through the app.
-SUPPORTED_LANGUAGES = {
-    "Auto Detect": None,
-    "English": "en",
-    "Hindi": "hi",
-    "Marathi": "mr",
-}
+# English is the only supported output language across organizations, colleges,
+# teams, and academic settings, keeping the workflow consistent and simple.
+SUPPORTED_LANGUAGES = {"English": "en"}
 DEFAULT_OUTPUT_LANGUAGE = os.getenv("DEFAULT_OUTPUT_LANGUAGE", "English")
 TRANSCRIPT_CHUNK_CHARS = int(os.getenv("TRANSCRIPT_CHUNK_CHARS", "12000"))
 
 # ── NLP Parameters ──
 SHORT_SUMMARY_SENTENCES = 3
-DETAILED_SUMMARY_SENTENCES = 7
+DETAILED_SUMMARY_SENTENCES = 10
 BULLET_POINTS_COUNT = 8
 TOP_KEYWORDS = 20
 MAX_TOPICS = 10

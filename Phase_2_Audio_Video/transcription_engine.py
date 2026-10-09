@@ -12,6 +12,11 @@ import soundfile as sf
 from openai import OpenAI
 
 try:
+    from faster_whisper import WhisperModel
+except ImportError:  # pragma: no cover - optional local fallback
+    WhisperModel = None
+
+try:
     from transformers import pipeline
 except ImportError:  # pragma: no cover - optional local fallback
     pipeline = None
@@ -24,6 +29,8 @@ class TranscriptionEngine:
 
     _pipeline = None
     _current_model = None
+    _faster_whisper_model = None
+    _faster_whisper_model_name = None
 
     @staticmethod
     def _mime_type(file_path: str) -> str:
@@ -44,12 +51,20 @@ class TranscriptionEngine:
 
     @classmethod
     def get_pipeline(cls, model_name=None):
-        """Get or initialize the cached transformers ASR pipeline on CPU."""
-        if pipeline is None:
-            raise ValueError("Local Whisper is unavailable because the 'transformers' package is not installed. Configure an OpenAI speech-to-text API key or install the local transcription dependency set.")
-
+        """Prefer faster-whisper for local transcription; fall back to transformers only if unavailable."""
         if model_name is None:
             model_name = config.WHISPER_MODEL
+
+        if WhisperModel is not None:
+            normalized_name = model_name.replace("openai/whisper-", "")
+            if cls._faster_whisper_model is None or cls._faster_whisper_model_name != normalized_name:
+                print(f"Initializing faster-whisper model '{normalized_name}' on CPU...")
+                cls._faster_whisper_model = WhisperModel(normalized_name, device="cpu", compute_type="int8")
+                cls._faster_whisper_model_name = normalized_name
+            return cls._faster_whisper_model
+
+        if pipeline is None:
+            raise ValueError("Local Whisper is unavailable because the 'faster-whisper' or 'transformers' package is not installed. Configure an OpenAI speech-to-text API key or install the local transcription dependency set.")
 
         if cls._pipeline is None or cls._current_model != model_name:
             print(f"Initializing local Whisper model '{model_name}' on CPU...")
@@ -87,6 +102,17 @@ class TranscriptionEngine:
         if not key:
             raise ValueError("Speech-to-text API key is missing. Set SPEECH_TO_TEXT_API_KEY or OPENAI_API_KEY in your environment.")
         return key
+
+    @staticmethod
+    def get_backend_preference() -> str:
+        """Choose the fastest available transcription backend for this runtime."""
+        if config.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY") or os.getenv("SPEECH_TO_TEXT_API_KEY"):
+            return "openai"
+        if WhisperModel is not None:
+            return "faster-whisper"
+        if pipeline is not None:
+            return "transformers"
+        return "none"
 
     def _transcribe_with_openai(self, file_path: str) -> str:
         """Use the OpenAI transcription endpoint for reliable meeting audio conversion."""
@@ -216,13 +242,25 @@ class TranscriptionEngine:
                 audio_data = audio_data.mean(axis=-1)
 
             pipe = self.get_pipeline(model_name)
-            result = pipe(
-                {"raw": audio_data, "sampling_rate": samplerate},
-                chunk_length_s=30,
-                stride_length_s=5,
-                return_timestamps=False,
-            )
-            transcription = result.get("text", "").strip()
+
+            if WhisperModel is not None and hasattr(pipe, "transcribe"):
+                segments, _ = pipe.transcribe(
+                    temp_wav_path,
+                    language="en",
+                    task="transcribe",
+                    vad_filter=True,
+                    beam_size=1,
+                )
+                transcription = " ".join(segment.text.strip() for segment in segments if segment.text and segment.text.strip())
+            else:
+                result = pipe(
+                    {"raw": audio_data, "sampling_rate": samplerate},
+                    chunk_length_s=30,
+                    stride_length_s=5,
+                    return_timestamps=False,
+                )
+                transcription = result.get("text", "").strip()
+
             if not transcription:
                 raise ValueError("The audio file produced an empty transcript. Please check the recording quality and try again.")
             return transcription
@@ -258,27 +296,8 @@ class TranscriptionEngine:
 
     @staticmethod
     def detect_language(text: str) -> dict:
-        """Detect the supported meeting language without destroying the source text.
-
-        Whisper remains the source of truth for audio language detection. This
-        lightweight fallback is useful for pasted transcripts and offline mode.
-        """
-        text = text or ""
-        devanagari = len(re.findall(r"[\u0900-\u097F]", text))
-        latin = len(re.findall(r"[A-Za-z]", text))
-        if devanagari:
-            marathi_markers = ("आहे", "आणि", "करू", "करणार", "करेल", "पर्यंत", "मध्ये", "साठी")
-            hindi_markers = ("है", "और", "करेगा", "करेंगे", "तक", "में", "के लिए")
-            marathi_score = sum(text.count(marker) for marker in marathi_markers)
-            hindi_score = sum(text.count(marker) for marker in hindi_markers)
-            if marathi_score > hindi_score:
-                return {"language": "Marathi", "code": "mr", "confidence": "high"}
-            if hindi_score > marathi_score:
-                return {"language": "Hindi", "code": "hi", "confidence": "high"}
-            return {"language": "Hindi/Marathi", "code": "hi-mr", "confidence": "low"}
-        if latin:
-            return {"language": "English", "code": "en", "confidence": "medium"}
-        return {"language": "Unknown", "code": "unknown", "confidence": "low"}
+        """MeetMind is English-first for all organizations, colleges, and teams."""
+        return {"language": "English", "code": "en", "confidence": "high"}
 
     @staticmethod
     def _timestamp(seconds: float) -> str:
@@ -286,6 +305,31 @@ class TranscriptionEngine:
         hours, remainder = divmod(total, 3600)
         minutes, secs = divmod(remainder, 60)
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+    @staticmethod
+    def parse_speaker_turns(text: str, fallback_speaker: str = "Unknown") -> list[dict]:
+        """Parse explicit speaker labels while preserving unlabeled transcript text."""
+        turns = []
+        current_speaker = fallback_speaker
+        current_text = []
+        label_pattern = re.compile(r"^\s*(?:\[([^\]]+)\]|([A-Za-z][\w .'-]{0,60}))\s*:\s*(.*)$")
+
+        for line in (text or "").splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            match = label_pattern.match(stripped)
+            if match:
+                if current_text:
+                    turns.append({"speaker": current_speaker, "text": " ".join(current_text).strip()})
+                current_speaker = (match.group(1) or match.group(2)).strip()
+                current_text = [match.group(3).strip()] if match.group(3).strip() else []
+            else:
+                current_text.append(stripped)
+
+        if current_text:
+            turns.append({"speaker": current_speaker, "text": " ".join(current_text).strip()})
+        return [turn for turn in turns if turn["text"]]
 
     def transcribe_file_detailed(self, file_path: str, model_name: str = None) -> dict:
         """Transcribe every chronological chunk and retain source timestamps.
@@ -311,12 +355,14 @@ class TranscriptionEngine:
                     text = self._transcribe_local_whisper(chunk_path, model_name)
                 start = index * config.AUDIO_CHUNK_SECONDS
                 end = min(start + config.AUDIO_CHUNK_SECONDS, duration) if duration else start
-                chunks.append({
-                    "speaker": "Unknown",
-                    "start": self._timestamp(start),
-                    "end": self._timestamp(end),
-                    "text": text.strip(),
-                })
+                turns = self.parse_speaker_turns(text)
+                for turn in turns:
+                    chunks.append({
+                        "speaker": turn["speaker"],
+                        "start": self._timestamp(start),
+                        "end": self._timestamp(end),
+                        "text": turn["text"],
+                    })
         finally:
             for chunk_path in chunk_paths:
                 if chunk_path != file_path and os.path.exists(chunk_path):
@@ -335,6 +381,10 @@ class TranscriptionEngine:
             "duration_seconds": duration,
             "detected_language": self.detect_language(transcript),
             "chunk_count": len(segments),
+            "diarization": {
+                "enabled": any(segment["speaker"] != "Unknown" for segment in segments),
+                "source": "explicit transcript labels" if any(segment["speaker"] != "Unknown" for segment in segments) else "unavailable",
+            },
         }
 
     def transcribe_file(self, file_path: str, model_name: str = None) -> str:
@@ -364,3 +414,13 @@ class TranscriptionEngine:
             return self._transcribe_local_whisper(file_path, model_name)
         except ValueError as local_error:
             raise ValueError(f"Audio could not be transcribed. {local_error}") from local_error
+
+    def transcribe_file_auto_tier(self, file_path: str, model_name: str = None) -> dict:
+        """Return transcript plus the selected backend for visibility and future tuning."""
+        backend = self.get_backend_preference()
+        transcript = self.transcribe_file(file_path, model_name)
+        return {
+            "transcript": transcript,
+            "backend": backend,
+            "model": model_name or config.WHISPER_MODEL,
+        }
