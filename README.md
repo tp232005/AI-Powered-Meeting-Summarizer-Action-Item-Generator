@@ -260,7 +260,3 @@ python -m pytest test_audio_transcription.py test_kb.py test_calendar.py test_se
 - Speaker attribution depends on speaker labels in the transcript or transcription output. The project should not be treated as a guaranteed speaker-identification service.
 - NLP extraction and the readiness score are aids for review. Confirm decisions, owners, dates, risks, and readiness with meeting participants.
 - Authentication and organization scoping are implemented for this application prototype; assess deployment, security, backups, and access controls before exposing it to production users.
-
-## License
-
-No license file is currently included. Contact the repository owner for reuse and distribution terms.
