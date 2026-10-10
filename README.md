@@ -11,6 +11,7 @@ The current application is the Streamlit app in `Phase_2_Audio_Video/`. It suppo
 - [Architecture](#architecture)
 - [Technology stack](#technology-stack)
 - [Getting started](#getting-started)
+- [Deploy on Streamlit Community Cloud](#deploy-on-streamlit-community-cloud)
 - [Configuration](#configuration)
 - [Using MeetMind](#using-meetmind)
 - [Project structure](#project-structure)
@@ -178,6 +179,23 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 python -m streamlit run Phase_2_Audio_Video/app.py
 ```
+
+## Deploy on Streamlit Community Cloud
+
+The current Streamlit app can be deployed from this GitHub repository:
+
+1. Sign in to [Streamlit Community Cloud](https://share.streamlit.io/) with GitHub and choose **Create app**.
+2. Select this repository, the `main` branch, and `Phase_2_Audio_Video/app.py` as the app file. Community Cloud will install dependencies from the root `requirements.txt`.
+3. If you want audio transcription through OpenAI, open the app's **Settings > Secrets** and add:
+
+   ```toml
+   SPEECH_TO_TEXT_API_KEY = "your-api-key"
+   ```
+
+   This can be omitted if you only want to try transcript-based analysis. Keep API keys in Community Cloud secrets; do not put them in source files or commit a `secrets.toml`.
+4. Choose **Deploy** and wait for the first build. The first startup may take longer while NLP resources are downloaded.
+
+This setup is intended for a public demo with sample or otherwise non-sensitive meeting data. The SQLite database and uploaded files are stored on the app's local filesystem, which Community Cloud does not provide as durable storage; data may be lost when the app restarts or is redeployed. Do not use this deployment for confidential transcripts or as a production record system. Ollama is optional and its default `localhost` URL will not refer to your own computer from the hosted app.
 
 ## Configuration
 
