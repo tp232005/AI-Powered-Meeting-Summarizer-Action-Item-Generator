@@ -27,10 +27,10 @@ nltk.download("averaged_perceptron_tagger_eng", quiet=True)
 
 try:
     _nlp = spacy.load("en_core_web_sm")
-except OSError:
-    import subprocess, sys
-    subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
-    _nlp = spacy.load("en_core_web_sm")
+except OSError as exc:
+    raise RuntimeError(
+        "The spaCy English model is missing. Install dependencies from requirements.txt."
+    ) from exc
 
 STOP_WORDS = set(stopwords.words("english"))
 
