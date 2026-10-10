@@ -26,3 +26,31 @@ def test_validate_audio_file_rejects_large_file(tmp_path):
 
 def test_audio_limit_is_30_mb():
     assert config.MAX_AUDIO_FILE_SIZE_MB == 30
+
+
+def test_openai_failure_does_not_fall_back_to_slow_local_transcription(monkeypatch, tmp_path):
+    engine = TranscriptionEngine()
+    audio_file = tmp_path / "meeting.wav"
+    audio_file.write_bytes(b"audio")
+    local_transcription_called = False
+
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(engine, "validate_audio_file", lambda path: True)
+    monkeypatch.setattr(engine, "_estimate_duration", lambda path: 60)
+    monkeypatch.setattr(
+        engine,
+        "_transcribe_with_openai",
+        lambda path: (_ for _ in ()).throw(RuntimeError("API unavailable")),
+    )
+
+    def local_transcription(*args, **kwargs):
+        nonlocal local_transcription_called
+        local_transcription_called = True
+        return "slow local transcript"
+
+    monkeypatch.setattr(engine, "_transcribe_local_whisper", local_transcription)
+
+    with pytest.raises(RuntimeError, match="OpenAI transcription failed"):
+        engine.transcribe_file_detailed(str(audio_file))
+
+    assert not local_transcription_called

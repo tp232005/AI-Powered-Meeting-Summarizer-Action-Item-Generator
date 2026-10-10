@@ -104,9 +104,17 @@ class TranscriptionEngine:
         return key
 
     @staticmethod
+    def _has_openai_api_key() -> bool:
+        return bool(
+            config.OPENAI_API_KEY
+            or os.getenv("OPENAI_API_KEY")
+            or os.getenv("SPEECH_TO_TEXT_API_KEY")
+        )
+
+    @staticmethod
     def get_backend_preference() -> str:
         """Choose the fastest available transcription backend for this runtime."""
-        if config.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY") or os.getenv("SPEECH_TO_TEXT_API_KEY"):
+        if TranscriptionEngine._has_openai_api_key():
             return "openai"
         if WhisperModel is not None:
             return "faster-whisper"
@@ -346,11 +354,14 @@ class TranscriptionEngine:
         chunks = []
         try:
             for index, chunk_path in enumerate(chunk_paths):
-                if config.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY") or os.getenv("SPEECH_TO_TEXT_API_KEY"):
+                if self._has_openai_api_key():
                     try:
                         text = self._transcribe_with_openai(chunk_path)
-                    except Exception:
-                        text = self._transcribe_local_whisper(chunk_path, model_name)
+                    except Exception as exc:
+                        raise RuntimeError(
+                            "OpenAI transcription failed. Check that your API key is valid "
+                            "and billing is enabled. Local CPU transcription was skipped."
+                        ) from exc
                 else:
                     text = self._transcribe_local_whisper(chunk_path, model_name)
                 start = index * config.AUDIO_CHUNK_SECONDS
@@ -406,9 +417,15 @@ class TranscriptionEngine:
                 if "40" in str(exc) or "too large" in str(exc).lower() or "exceeds" in str(exc).lower() or "size" in str(exc).lower():
                     try:
                         return self._transcribe_with_openai_chunked(file_path)
-                    except Exception:
-                        pass
-                print(f"OpenAI transcription failed; falling back to local Whisper: {exc}")
+                    except Exception as chunk_exc:
+                        raise RuntimeError(
+                            "OpenAI transcription failed, including its chunked retry. "
+                            "Check your API key, billing, and recording size."
+                        ) from chunk_exc
+                raise RuntimeError(
+                    "OpenAI transcription failed. Check that your API key is valid "
+                    "and billing is enabled. Local CPU transcription was skipped."
+                ) from exc
 
         try:
             return self._transcribe_local_whisper(file_path, model_name)
