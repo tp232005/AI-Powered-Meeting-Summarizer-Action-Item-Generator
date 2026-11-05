@@ -8,7 +8,6 @@ try:
 except ImportError:
     pass
 
-
 def _get_setting(name, default=None):
     value = os.getenv(name)
     if value is not None:
@@ -31,16 +30,24 @@ OPENAI_API_KEY = _get_setting("OPENAI_API_KEY") or _get_setting("SPEECH_TO_TEXT_
 LLM_API_KEY = _get_setting("LLM_API_KEY")
 
 # ── Database ──
-DB_PATH = os.path.join(os.path.dirname(__file__), "meeting_knowledge_base.db")
+DB_PATH = os.path.abspath(
+    _get_setting("MEETING_DATABASE_PATH", os.path.join(os.path.dirname(__file__), "meeting_knowledge_base.db"))
+)
+RECORDINGS_DIR = os.path.abspath(
+    _get_setting("MEETING_RECORDINGS_DIR", os.path.join(os.path.dirname(__file__), "recordings"))
+)
 
 # ── Speech-to-Text (ASR) Configuration ──
 # Use the smallest reliable model by default to keep large meetings responsive on CPU.
 WHISPER_MODEL = _get_setting("WHISPER_MODEL", "openai/whisper-tiny.en")
 SPEECH_TO_TEXT_PROVIDER = _get_setting("SPEECH_TO_TEXT_PROVIDER", "openai")
 AUDIO_CHUNK_SECONDS = int(_get_setting("AUDIO_CHUNK_SECONDS", "180"))
-MAX_AUDIO_FILE_SIZE_MB = int(_get_setting("MAX_AUDIO_FILE_SIZE_MB", "30"))
+MAX_AUDIO_FILE_SIZE_MB = int(_get_setting("MAX_AUDIO_FILE_SIZE_MB", "1024"))
 MAX_AUDIO_FILE_SIZE_BYTES = MAX_AUDIO_FILE_SIZE_MB * 1024 * 1024
-SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".mp4", ".webm", ".ogg", ".flac", ".mov", ".mkv", ".avi"}
+SUPPORTED_AUDIO_EXTENSIONS = {
+    ".mp3", ".wav", ".m4a", ".mp4", ".webm", ".ogg", ".flac",
+    ".mov", ".mkv", ".avi", ".flv", ".wmv",
+}
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 

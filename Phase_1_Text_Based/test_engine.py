@@ -51,4 +51,4 @@ print(f"  Email report: {len(email)} chars")
 md = rg.generate_markdown(result, "Q1 Product Meeting")
 print(f"  MD report: {len(md)} chars")
 
-print("\n✅ ALL TESTS PASSED!")
+print("\nALL TESTS PASSED!")

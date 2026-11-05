@@ -11,10 +11,12 @@ __pycache__/
 # Runtime-generated data
 meeting_knowledge_base.db
 temp/
+/Phase_2_Audio_Video/recordings/
 
 # Keep the environment template tracked
 !.env.example
-
 # Local model and tool caches
 .cache/
-.streamlit/
+/.streamlit/
+!/.streamlit/
+!/.streamlit/config.toml

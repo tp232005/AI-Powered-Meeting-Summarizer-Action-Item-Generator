@@ -79,6 +79,24 @@ class KnowledgeBase:
     def save(self, title: str, transcript: str, analysis: dict) -> int:
         """Save a meeting and its analysis. Returns the meeting ID."""
         conn = self._get_conn()
+        stored_analysis = dict(analysis)
+        stored_analysis.pop("utterances", None)
+        stored_analysis["speakers"] = {
+            name: [] for name in analysis.get("speakers", {})
+        }
+        stored_topics = []
+        for topic in analysis.get("topics", []):
+            sentences = topic.get("sentences", [])
+            stored_topic = {
+                key: value for key, value in topic.items()
+                if key != "sentences"
+            }
+            stored_topic["sentence_count"] = len(sentences)
+            stored_topic["sample_sentence"] = sentences[0] if sentences else ""
+            stored_topics.append(stored_topic)
+        if "topics" in analysis:
+            stored_analysis["topics"] = stored_topics
+
         cursor = conn.execute(
             """INSERT INTO meetings
                (title, date, transcript, analysis, short_summary, detailed_summary,
@@ -89,7 +107,7 @@ class KnowledgeBase:
                 title,
                 analysis.get("timestamp", datetime.now().isoformat()),
                 transcript,
-                json.dumps(analysis, default=str),
+                json.dumps(stored_analysis, default=str),
                 analysis.get("short_summary", ""),
                 analysis.get("detailed_summary", ""),
                 len(analysis.get("decisions", [])),
@@ -214,3 +232,77 @@ class KnowledgeBase:
             d["analysis"] = json.loads(d["analysis"])
             results.append(d)
         return results
+
+    def get_analytics_records(self) -> list:
+        """Load only the compact fields needed by cross-meeting analytics."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT id, title, date, productivity_score, tasks_count,
+                      decisions_count, word_count
+               FROM meetings ORDER BY created_at DESC"""
+        ).fetchall()
+        if not rows:
+            return []
+
+        records = {row["id"]: {
+            "id": row["id"],
+            "title": row["title"],
+            "date": row["date"],
+            "analysis": {
+                "productivity_score": {
+                    "total": row["productivity_score"] or 0,
+                    "grade": self._productivity_grade(row["productivity_score"] or 0),
+                },
+                "task_count": row["tasks_count"] or 0,
+                "decision_count": row["decisions_count"] or 0,
+                "stats": {
+                    "word_count": row["word_count"] or 0,
+                    "estimated_duration": round((row["word_count"] or 0) / 130),
+                },
+                "speakers": {},
+                "topics": [],
+                "risks": [],
+            },
+        } for row in rows}
+
+        for row in conn.execute(
+            """SELECT meetings.id, speakers.key AS name
+               FROM meetings, json_each(meetings.analysis, '$.speakers') AS speakers"""
+        ):
+            records[row["id"]]["analysis"]["speakers"][row["name"]] = None
+
+        for row in conn.execute(
+            """SELECT meetings.id, keywords.value AS keyword
+               FROM meetings,
+                    json_each(meetings.analysis, '$.topics') AS topics,
+                    json_each(topics.value, '$.keywords') AS keywords"""
+        ):
+            records[row["id"]]["analysis"]["topics"].append({
+                "keywords": [row["keyword"]],
+            })
+
+        for row in conn.execute(
+            """SELECT meetings.id,
+                      json_extract(risks.value, '$.severity') AS severity,
+                      json_extract(risks.value, '$.keywords') AS keywords
+               FROM meetings,
+                    json_each(meetings.analysis, '$.risks') AS risks"""
+        ):
+            records[row["id"]]["analysis"]["risks"].append({
+                "severity": row["severity"] or "low",
+                "keywords": json.loads(row["keywords"] or "[]"),
+            })
+
+        return list(records.values())
+
+    @staticmethod
+    def _productivity_grade(score: int) -> str:
+        if score >= 75:
+            return "A"
+        if score >= 60:
+            return "B"
+        if score >= 45:
+            return "C"
+        if score >= 30:
+            return "D"
+        return "F"

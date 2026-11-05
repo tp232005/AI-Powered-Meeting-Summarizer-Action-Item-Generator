@@ -999,6 +999,44 @@ if not current_user:
 kb.set_actor(current_user["id"], current_user["organization_id"])
 calendar.set_actor(current_user["id"], current_user["organization_id"])
 
+
+def load_meeting_into_session(meeting: dict) -> None:
+    """Make every meeting-specific page use the same selected saved record."""
+    st.session_state["current_meeting_id"] = meeting["id"]
+    st.session_state["current_result"] = meeting["analysis"]
+    st.session_state["current_title"] = meeting["title"]
+    st.session_state["current_transcript"] = meeting["transcript"]
+    st.session_state.pop("generated_report", None)
+    st.session_state.pop("report_type", None)
+    st.session_state.pop("memory_matches", None)
+    st.session_state.pop("memory_query", None)
+    st.session_state.pop("memory_answer", None)
+
+
+def clear_active_meeting() -> None:
+    for key in ("current_meeting_id", "current_result", "current_title", "current_transcript"):
+        st.session_state.pop(key, None)
+    st.session_state.pop("generated_report", None)
+    st.session_state.pop("report_type", None)
+    st.session_state.pop("memory_matches", None)
+    st.session_state.pop("memory_query", None)
+    st.session_state.pop("memory_answer", None)
+
+
+def render_recording(meeting: dict) -> None:
+    """Render the saved original recording without loading it into application memory."""
+    if not meeting.get("recording_path"):
+        return
+    recording_path = kb.get_recording_path(meeting["id"])
+    if recording_path is None:
+        st.warning("The recording file for this meeting is missing from the media store.")
+        return
+    st.markdown("#### Original recording")
+    if meeting.get("recording_type") == "video":
+        st.video(recording_path)
+    else:
+        st.audio(recording_path)
+
 # ── Plotly Dark Theme ──
 PLOTLY_LAYOUT = dict(
     template="plotly_dark",
@@ -1025,38 +1063,70 @@ def apply_professional_plotly_theme(fig):
 
 
 def safe_read_uploaded_audio(uploaded_file):
-    """Validate and persist uploaded audio to a temp file for processing."""
+    """Validate and persist uploaded audio/video to a temporary processing file."""
     if uploaded_file is None:
         return None
 
     ext = os.path.splitext(uploaded_file.name)[1].lower()
     if ext not in config.SUPPORTED_AUDIO_EXTENSIONS:
-        raise ValueError("Unsupported audio format. Please upload MP3, WAV, M4A, MP4, or WEBM.")
+        raise ValueError("Unsupported recording format. Upload a supported audio or video file.")
 
-    try:
-        file_size = uploaded_file.size
-        max_size = config.MAX_AUDIO_FILE_SIZE_BYTES
-        if file_size <= 0:
-            raise ValueError("The uploaded audio file is empty or corrupted.")
-        if file_size > max_size:
-            raise ValueError(f"Audio file is too large ({file_size / (1024 * 1024):.1f} MB). Keep it under {config.MAX_AUDIO_FILE_SIZE_MB} MB.")
-    except Exception:
-        raise
+    file_size = uploaded_file.size
+    max_size = config.MAX_AUDIO_FILE_SIZE_BYTES
+    if file_size <= 0:
+        raise ValueError("The uploaded recording is empty or corrupted.")
+    if file_size > max_size:
+        raise ValueError(
+            f"Recording is too large ({file_size / (1024 * 1024):.1f} MB). "
+            f"Keep it under {config.MAX_AUDIO_FILE_SIZE_MB} MB."
+        )
 
     temp_dir = config.TEMP_DIR
     os.makedirs(temp_dir, exist_ok=True)
     temp_path = os.path.join(temp_dir, f"upload_{uuid.uuid4().hex}{ext}")
     with open(temp_path, "wb") as temp_file:
-        temp_file.write(uploaded_file.getvalue())
+        temp_file.write(uploaded_file.getbuffer())
     return temp_path
 
 
-def retrieve_memory_matches(query: str, limit: int = 5) -> list:
+def load_text_sample() -> None:
+    sample_path = os.path.join(
+        os.path.dirname(__file__), "samples", "text", "sample_meeting.txt"
+    )
+    if not os.path.isfile(sample_path):
+        st.error(f"Sample transcript is missing: {sample_path}")
+        return
+    with open(sample_path, "r", encoding="utf-8") as sample_file:
+        sample_text = sample_file.read()
+    st.session_state["_text_transcript"] = sample_text
+    st.session_state["meeting_text_transcript"] = sample_text
+    st.session_state["_sample_title"] = "Q1 2025 Product Strategy Meeting"
+    st.session_state["meeting_title_input"] = "Q1 2025 Product Strategy Meeting"
+
+
+def update_meeting_title_from_upload(widget_key: str) -> None:
+    uploaded_file = st.session_state.get(widget_key)
+    if uploaded_file is not None:
+        title = os.path.splitext(uploaded_file.name)[0]
+        st.session_state["_sample_title"] = title
+        st.session_state["meeting_title_input"] = title
+
+
+def retrieve_memory_matches(
+    query: str, limit: int = 5, meeting_id: int = None
+) -> list:
     """Rank saved meetings with TF-IDF similarity and a deterministic fallback."""
     terms = set(re.findall(r"[a-z0-9]{3,}", query.lower()))
     records = []
-    for meeting in kb.list_meetings(limit=100):
-        full = kb.get(meeting["id"])
+    meetings = (
+        [kb.get(meeting_id)]
+        if meeting_id is not None
+        else kb.list_meetings(limit=100)
+    )
+    for meeting in meetings:
+        if meeting is None:
+            continue
+        full = meeting if "analysis" in meeting else kb.get(meeting["id"])
         if not full:
             continue
         analysis = full.get("analysis", {})
@@ -1121,11 +1191,14 @@ def answer_memory_question(query: str, meetings: list) -> str:
     return "No matching saved meeting contains enough information to answer that question.\n\n" + context
 
 
-def get_accountability_tasks() -> list:
+def get_accountability_tasks(meeting_id: int = None) -> list:
     """Flatten saved meeting tasks into tracker-friendly records."""
     records = []
-    for meeting in kb.list_meetings(limit=100):
-        full = kb.get(meeting["id"])
+    meetings = [kb.get(meeting_id)] if meeting_id is not None else kb.list_meetings(limit=100)
+    for meeting in meetings:
+        if meeting is None:
+            continue
+        full = meeting if "analysis" in meeting else kb.get(meeting["id"])
         if not full:
             continue
         for index, task in enumerate(full.get("analysis", {}).get("tasks", [])):
@@ -1168,9 +1241,13 @@ def quality_recommendations(analysis: dict) -> list:
     return advice
 
 
-def get_governance_summary() -> dict:
-    """Summarize follow-up and decision coverage across saved meetings."""
-    meetings = kb.list_meetings(limit=100)
+def get_governance_summary(meeting_id: int = None) -> dict:
+    """Summarize follow-up and decision coverage for the selected scope."""
+    meetings = (
+        [kb.get(meeting_id)] if meeting_id is not None
+        else kb.list_meetings(limit=100)
+    )
+    meetings = [meeting for meeting in meetings if meeting]
     needs_review = []
     meetings_with_tasks = 0
     meetings_with_decisions = 0
@@ -1191,7 +1268,7 @@ def get_governance_summary() -> dict:
                 "reason": "No action items" if not tasks else "No decisions recorded",
             })
 
-    tasks = get_accountability_tasks()
+    tasks = get_accountability_tasks(meeting_id)
     today = datetime.now().date()
     open_tasks = [task for task in tasks if task["status"] != "done"]
     overdue_tasks = [
@@ -1253,12 +1330,42 @@ with st.sidebar:
     page = navigation_labels[selected_navigation]
 
     st.markdown('<div class="nav-group-label">TOOLS & OUTPUT</div>', unsafe_allow_html=True)
+    meetings_for_selector = kb.list_meetings(limit=500)
+    current_meeting_id = st.session_state.get("current_meeting_id")
+    selector_key = f"active_meeting_selector_{current_meeting_id or 'none'}"
+    selected_meeting = st.selectbox(
+        "Active meeting",
+        options=[None, *meetings_for_selector],
+        index=next(
+            (index + 1 for index, meeting in enumerate(meetings_for_selector)
+             if meeting["id"] == current_meeting_id),
+            0,
+        ),
+        format_func=lambda meeting: (
+            "Select a meeting" if meeting is None
+            else f"{meeting['title']} · {str(meeting.get('date', ''))[:10]}"
+        ),
+        key=selector_key,
+    )
+    selected_meeting_id = selected_meeting["id"] if selected_meeting else None
+    if selected_meeting_id != current_meeting_id:
+        if selected_meeting is None:
+            clear_active_meeting()
+        else:
+            full_meeting = kb.get(selected_meeting_id)
+            if full_meeting is None:
+                st.error("The selected meeting is no longer available.")
+                clear_active_meeting()
+            else:
+                load_meeting_into_session(full_meeting)
+        st.rerun()
     st.divider()
 
-    # Ollama status
-    ollama_ok = llm.is_available()
-    meeting_count = len(kb.list_meetings())
-    st.caption(f"{meeting_count} meetings")
+    ollama_ok = llm.is_available() if page in {
+        "Analyze Meeting",
+        "Memory Assistant",
+        "Generate Report",
+    } else False
     st.caption(f"{current_user['name']} · {current_user['role']}")
     if st.button("Sign out", type="secondary"):
         st.session_state.clear()
@@ -1279,16 +1386,11 @@ page_titles = {
     "Generate Report": ("Generate Report", "Output / Export"),
     "Settings": ("Settings", "System / Preferences"),
 }
-shell_title, shell_breadcrumb = page_titles.get(page, ("MeetMind", "Workspace"))
+_, shell_breadcrumb = page_titles.get(page, ("MeetMind", "Workspace"))
 st.markdown(f"""
 <div class="top-shell">
     <div>
         <div class="breadcrumb">MEETMIND <span>/</span> {shell_breadcrumb.upper()}</div>
-        <div class="shell-title">{shell_title}</div>
-    </div>
-    <div class="shell-actions">
-        <span class="engine-dot"></span><span>Ready</span>
-        <span class="shell-avatar">DM</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1355,11 +1457,17 @@ def get_transcription_backend_status():
     return "transformers"
 
 
-def run_processing_flow(transcript: str, meeting_title: str, use_llm: bool, summary_len: int):
+def run_processing_flow(
+    transcript: str,
+    meeting_title: str,
+    use_llm: bool,
+    summary_len: int,
+    transcribe_input: bool = True,
+):
     """Execute the transcript pipeline with explicit staged status updates."""
     job_status = {
         "stage": "queued",
-        "backend": get_transcription_backend_status(),
+        "backend": get_transcription_backend_status() if transcribe_input else "not required",
         "use_llm": use_llm,
     }
     st.session_state["processing_job"] = job_status
@@ -1370,12 +1478,21 @@ def run_processing_flow(transcript: str, meeting_title: str, use_llm: bool, summ
         backend_text = "Local faster-whisper"
     elif job_status["backend"] == "transformers":
         backend_text = "Local transformers Whisper"
+    elif job_status["backend"] == "not required":
+        backend_text = "Not required for a provided transcript"
     else:
         backend_text = "No transcription backend available"
 
-    status = st.status(f"Queued transcription job\nSelected backend: {backend_text}", expanded=True)
-    status.update(label=f"Transcribing with {backend_text}...", state="running")
-    st.session_state["processing_job"]["stage"] = "transcribing"
+    status = st.status(
+        f"Queued meeting analysis\nSelected backend: {backend_text}",
+        expanded=True,
+    )
+    if transcribe_input:
+        status.update(label=f"Transcribing with {backend_text}...", state="running")
+        st.session_state["processing_job"]["stage"] = "transcribing"
+    else:
+        status.update(label="Analyzing the provided transcript...", state="running")
+        st.session_state["processing_job"]["stage"] = "summarizing"
 
     result = analyzer.analyze_hierarchical(transcript)
     st.session_state["processing_job"]["stage"] = "summarizing"
@@ -1396,6 +1513,113 @@ def run_processing_flow(transcript: str, meeting_title: str, use_llm: bool, summ
     return result
 
 
+def analyze_and_save_meeting(
+    transcript: str,
+    meeting_title: str,
+    use_llm: bool,
+    summary_len: int,
+    input_mode: str,
+    uploaded_file,
+) -> dict:
+    """Analyze the submitted transcript and atomically associate its original recording."""
+    recording_temp_path = None
+    progress = st.progress(0, text="Initializing analysis pipeline...")
+    try:
+        if uploaded_file is not None and input_mode != "Text transcript":
+            recording_temp_path = safe_read_uploaded_audio(uploaded_file)
+
+        result = run_processing_flow(
+            transcript,
+            meeting_title,
+            use_llm,
+            summary_len,
+            transcribe_input=input_mode != "Text transcript",
+        )
+        if "error" in result:
+            raise RuntimeError(result["error"])
+        progress.progress(60, text="Preparing meeting details...")
+
+        if use_llm and ollama_ok:
+            progress.progress(70, text="Enhancing with language model...")
+            llm_context = "\n\n".join(
+                chunk["summary"] for chunk in result.get("chunk_summaries", [])
+            ) or transcript
+            llm_summary = llm.generate_summary(llm_context, "concise")
+            if llm_summary:
+                result["llm_summary"] = llm_summary
+            llm_tasks = llm.extract_tasks(llm_context)
+            if llm_tasks:
+                result["llm_tasks"] = llm_tasks
+            llm_risks = llm.analyze_risks(llm_context)
+            if llm_risks:
+                result["llm_risks"] = llm_risks
+
+        detected_language = transcriber.detect_language(transcript)
+        result["input_language"] = "English"
+        result["detected_language"] = detected_language
+        result["output_language"] = "English"
+        transcription_metadata = st.session_state.get("_transcription_metadata", {})
+        result["transcript_segments"] = (
+            transcription_metadata.get("segments", [])
+            if transcription_metadata.get("transcript") == transcript else []
+        )
+        if not result["transcript_segments"]:
+            result["transcript_segments"] = [
+                {
+                    "speaker": turn["speaker"],
+                    "start": "00:00:00",
+                    "end": "00:00:00",
+                    "text": turn["text"],
+                }
+                for turn in transcriber.parse_speaker_turns(transcript)
+            ]
+        result["diarization"] = {
+            "enabled": any(
+                segment.get("speaker") != "Unknown"
+                for segment in result["transcript_segments"]
+            ),
+            "source": (
+                "explicit transcript labels"
+                if any(segment.get("speaker") != "Unknown" for segment in result["transcript_segments"])
+                else "unavailable"
+            ),
+        }
+
+        title = meeting_title.strip() or "Untitled Meeting"
+        result["title"] = title
+        result["date"] = datetime.now().strftime("%Y-%m-%d")
+        result["meeting_language"] = "English"
+        result["summary_length"] = summary_len
+        result["analysis_mode"] = (
+            "video" if input_mode == "Video recording"
+            else "audio" if input_mode == "Audio recording"
+            else "text"
+        )
+
+        progress.progress(85, text="Saving meeting, transcript, and recording...")
+        meeting_id = kb.save(
+            title,
+            transcript,
+            result,
+            recording_path=recording_temp_path,
+            recording_name=uploaded_file.name if recording_temp_path else None,
+            recording_type=(
+                "video" if input_mode == "Video recording"
+                else "audio" if recording_temp_path else None
+            ),
+            recording_duration=transcription_metadata.get("duration_seconds"),
+        )
+        full_meeting = kb.get(meeting_id)
+        if full_meeting is None:
+            raise RuntimeError("The meeting was saved but could not be loaded from the Knowledge Base.")
+        load_meeting_into_session(full_meeting)
+        progress.progress(100, text="Complete")
+        return result
+    finally:
+        if recording_temp_path and os.path.exists(recording_temp_path):
+            os.remove(recording_temp_path)
+
+
 # ═══════════════════════════════════════════
 #  PAGE: ANALYZE MEETING
 # ═══════════════════════════════════════════
@@ -1408,7 +1632,13 @@ if page == "Analyze Meeting":
     col1, col2 = st.columns([3, 1])
     with col1:
         default_title = st.session_state.get("_sample_title", "")
-        meeting_title = st.text_input("Meeting title", value=default_title, placeholder="e.g., Product Strategy Meeting", label_visibility="visible")
+        st.session_state.setdefault("meeting_title_input", default_title)
+        meeting_title = st.text_input(
+            "Meeting title",
+            placeholder="e.g., Product Strategy Meeting",
+            label_visibility="visible",
+            key="meeting_title_input",
+        )
     with col2:
         summary_len = st.slider("Summary length", 2, 12, 5)
 
@@ -1421,13 +1651,22 @@ if page == "Analyze Meeting":
         horizontal=True,
         key="meeting_input_mode",
     )
+    if st.session_state.get("_last_input_mode") != input_mode:
+        st.session_state["_last_input_mode"] = input_mode
+        st.session_state.pop("_sample_text", None)
+        st.session_state.pop("_transcription_metadata", None)
+        st.session_state.pop("_uploaded_source_id", None)
 
     uploaded_file = None
     if input_mode == "Text transcript":
         st.markdown("<div class='section-header'>Text transcript</div>", unsafe_allow_html=True)
     else:
         is_video = input_mode == "Video recording"
-        accepted_types = ["mp4", "mkv", "avi", "mov", "webm"] if is_video else ["mp3", "wav", "m4a", "flac", "ogg"]
+        accepted_types = (
+            ["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]
+            if is_video else ["mp3", "wav", "m4a", "flac", "ogg", "webm"]
+        )
+        uploader_key = f"{input_mode.lower().replace(' ', '_')}_uploader"
         st.markdown(
             f"<div class='section-header'>{'Video' if is_video else 'Audio'} recording</div>",
             unsafe_allow_html=True,
@@ -1435,27 +1674,37 @@ if page == "Analyze Meeting":
         uploaded_file = st.file_uploader(
             f"Upload {('video' if is_video else 'audio')} recording",
             type=accepted_types,
-            help="The recording is normalized, chunked, transcribed, and then analyzed.",
-            key=f"{input_mode.lower().replace(' ', '_')}_uploader",
+            help=(
+                f"Up to {config.MAX_AUDIO_FILE_SIZE_MB} MB. Recordings are split into "
+                f"{config.AUDIO_CHUNK_SECONDS}-second chunks for transcription and saved "
+                "with the meeting so you can replay them later."
+            ),
+            key=uploader_key,
+            on_change=update_meeting_title_from_upload,
+            args=(uploader_key,),
         )
-        if not is_video:
-            st.caption(
-                "Try the four short and one ~10-minute English demo recordings in "
-                "`Phase_2_Audio_Video/samples/demo_meetings/`."
-            )
-
     if uploaded_file is not None:
+        source_id = (
+            uploaded_file.name,
+            uploaded_file.size,
+            getattr(uploaded_file, "file_id", None),
+        )
+        if st.session_state.get("_uploaded_source_id") != source_id:
+            st.session_state["_uploaded_source_id"] = source_id
+            st.session_state.pop("_sample_text", None)
+            st.session_state.pop("_transcription_metadata", None)
+            st.session_state["_sample_title"] = os.path.splitext(uploaded_file.name)[0]
         col_u1, col_u2 = st.columns([3, 1])
         with col_u1:
             st.info(f"File uploaded: `{uploaded_file.name}` ({uploaded_file.size / (1024*1024):.2f} MB)")
         with col_u2:
-            if st.button("Transcribe", type="secondary", use_container_width=True):
+            if st.button("Transcribe", type="secondary", width="stretch"):
                 try:
                     temp_file_path = safe_read_uploaded_audio(uploaded_file)
                     if temp_file_path is None:
-                        st.error("No audio file was uploaded.")
+                        st.error("Select an audio or video recording first.")
                     else:
-                        status = st.status("Uploading recording...\nTranscribing chunks...\nPreparing transcript...", expanded=True)
+                        status = st.status("Preparing recording for transcription...", expanded=True)
                         try:
                             with st.spinner("Converting audio to text and preparing the transcript..."):
                                 transcription = transcriber.transcribe_file_detailed(temp_file_path)
@@ -1469,28 +1718,30 @@ if page == "Analyze Meeting":
                             st.rerun()
                         except Exception as exc:
                             status.update(label="Failed", state="error")
-                            st.error(f"Recording processing failed: {exc}")
+                            st.error(f"Transcription failed: {exc}")
                         finally:
                             if os.path.exists(temp_file_path):
-                                try:
-                                    os.remove(temp_file_path)
-                                except Exception:
-                                    pass
+                                os.remove(temp_file_path)
                 except ValueError as exc:
                     st.error(str(exc))
                 except Exception as exc:
-                    st.error("Recording could not be processed. Please try another file or check the recording.")
-                    st.caption(str(exc))
+                    st.error(f"Recording could not be prepared: {exc}")
 
-    default_text = st.session_state.get("_sample_text", "")
+    default_text = (
+        st.session_state.get("_text_transcript", "")
+        if input_mode == "Text transcript"
+        else st.session_state.get("_sample_text", "")
+    )
     transcript = ""
     if input_mode == "Text transcript":
+        st.session_state.setdefault("meeting_text_transcript", default_text)
         transcript = st.text_area(
             "Paste transcript",
-            value=default_text,
             height=280,
             placeholder="Paste your meeting transcript here. Speaker format is supported, for example:\n\nSarah: Good morning everyone.\nJames: Let's start with the agenda.",
+            key="meeting_text_transcript",
         )
+        st.session_state["_text_transcript"] = transcript
     elif default_text:
         transcript = st.text_area(
             "Transcript preview",
@@ -1501,91 +1752,45 @@ if page == "Analyze Meeting":
 
     col_s, col_l, col_a = st.columns([1, 1, 2])
     with col_s:
-        if input_mode == "Text transcript" and st.button("Load text test", use_container_width=True, type="secondary"):
-            sample_path = os.path.join(os.path.dirname(__file__), "samples", "text", "sample_meeting.txt")
-            if os.path.exists(sample_path):
-                with open(sample_path, "r", encoding="utf-8") as f:
-                    st.session_state["_sample_text"] = f.read()
-                    st.session_state["_sample_title"] = "Q1 2025 Product Strategy Meeting"
-                st.rerun()
+        if input_mode == "Text transcript":
+            st.button(
+                "Load text test",
+                width="stretch",
+                type="secondary",
+                on_click=load_text_sample,
+            )
 
     with col_l:
         use_llm = st.checkbox("Use language model", value=False)
 
     with col_a:
-        analyze_clicked = st.button("Analyze meeting", type="primary", use_container_width=True)
+        analyze_clicked = st.button("Analyze meeting", type="primary", width="stretch")
 
     # Run analysis
     if analyze_clicked and transcript.strip():
-        progress = st.progress(0, text="Initializing analysis pipeline...")
-        result = run_processing_flow(transcript, meeting_title, use_llm, summary_len)
-
-        if "error" in result:
-            st.error(result["error"])
-        else:
-            progress.progress(60, text="Processing results...")
-
-            if use_llm and ollama_ok:
-                progress.progress(70, text="Enhancing with language model...")
-                llm_context = "\n\n".join(
-                    chunk["summary"] for chunk in result.get("chunk_summaries", [])
-                ) or transcript
-                llm_summary = llm.generate_summary(llm_context, "concise")
-                if llm_summary:
-                    result["llm_summary"] = llm_summary
-                llm_tasks = llm.extract_tasks(llm_context)
-                if llm_tasks:
-                    result["llm_tasks"] = llm_tasks
-                llm_risks = llm.analyze_risks(llm_context)
-                if llm_risks:
-                    result["llm_risks"] = llm_risks
-
-            detected_language = transcriber.detect_language(transcript)
-            result["input_language"] = "English"
-            result["detected_language"] = detected_language
-            result["output_language"] = "English"
-            transcription_metadata = st.session_state.get("_transcription_metadata", {})
-            result["transcript_segments"] = (
-                transcription_metadata.get("segments", [])
-                if transcription_metadata.get("transcript") == transcript else []
+        try:
+            result = analyze_and_save_meeting(
+                transcript,
+                meeting_title,
+                use_llm,
+                summary_len,
+                input_mode,
+                uploaded_file,
             )
-            if not result["transcript_segments"]:
-                result["transcript_segments"] = [
-                    {
-                        "speaker": turn["speaker"],
-                        "start": "00:00:00",
-                        "end": "00:00:00",
-                        "text": turn["text"],
-                    }
-                    for turn in transcriber.parse_speaker_turns(transcript)
-                ]
-            result["diarization"] = {
-                "enabled": any(segment.get("speaker") != "Unknown" for segment in result["transcript_segments"]),
-                "source": "explicit transcript labels" if any(segment.get("speaker") != "Unknown" for segment in result["transcript_segments"]) else "unavailable",
-            }
-
-            if meeting_title:
-                result["title"] = meeting_title
-            else:
-                result["title"] = "Untitled Meeting"
-            result["date"] = datetime.now().strftime("%Y-%m-%d")
-            result["meeting_language"] = meeting_language
-            result["summary_length"] = summary_len
-            result["analysis_mode"] = "text" if input_mode == "Text transcript" else "audio"
-
-            title = result["title"]
-            st.session_state["current_result"] = result
-            st.session_state["current_title"] = title
-            st.session_state["current_transcript"] = transcript
-
-            progress.progress(85, text="Saving to Knowledge Base...")
-            kb.save(title, transcript, result)
-
-            progress.progress(100, text="Complete")
-            st.success(f"Analysis complete. **{title}** was saved to the Knowledge Base. Open Results Dashboard to review it.")
+            st.success(
+                f"Analysis complete. **{result['title']}** and its original recording "
+                "were saved. The active meeting is now selected in the sidebar."
+            )
+        except Exception as exc:
+            st.error(f"Meeting analysis or saving failed: {exc}")
 
     elif analyze_clicked:
-        st.error("Please paste a meeting transcript first.")
+        if input_mode == "Text transcript":
+            st.error("Paste a meeting transcript before analyzing.")
+        elif uploaded_file is None:
+            st.error("Upload and transcribe a recording before analyzing.")
+        else:
+            st.error("Transcribe the uploaded recording before analyzing.")
 
 
 # ═══════════════════════════════════════════
@@ -1605,20 +1810,18 @@ elif page == "Results Dashboard":
         """, unsafe_allow_html=True)
     else:
         st.markdown(f'<h1 class="hero-header">{title}</h1>', unsafe_allow_html=True)
-        st.markdown('<p class="hero-sub">Summary, decisions, action items, and risks from this meeting.</p>', unsafe_allow_html=True)
-        st.caption("Use this page to understand what was discussed and what needs to happen next.")
-        st.markdown('''
-        <div class="executive-panel">
-            <div class="eyebrow">Executive overview</div>
-            <p>Track decisions, accountability, follow-up risk, and participation quality in one polished operating view.</p>
-        </div>
-        ''', unsafe_allow_html=True)
+        st.markdown('<p class="hero-sub">A focused overview of this meeting and its outcomes.</p>', unsafe_allow_html=True)
         detected = result.get("detected_language", {})
         st.info(
             f"Input language: {result.get('input_language', detected.get('language', 'English'))} · "
             f"Detected: {detected.get('language', 'English')} ({detected.get('confidence', 'low')} confidence) · "
             f"Output: {result.get('output_language', 'English')}"
         )
+        current_meeting_id = st.session_state.get("current_meeting_id")
+        if current_meeting_id is not None:
+            current_meeting = kb.get(current_meeting_id)
+            if current_meeting:
+                render_recording(current_meeting)
 
         # Stats bar
         stats = result.get("stats", {})
@@ -1688,35 +1891,15 @@ elif page == "Results Dashboard":
 
         st.divider()
 
-        # ── Decisions & Tasks ──
-        col_d, col_t = st.columns(2)
-        with col_d:
-            st.markdown('<div class="section-header"><span class="icon">⚖️</span> Decisions Made</div>', unsafe_allow_html=True)
-            decisions = result.get("decisions", [])
-            if decisions:
-                for d in decisions:
-                    st.markdown(f'<div class="decision-card">{d}</div>', unsafe_allow_html=True)
-            else:
-                st.caption("No formal decisions detected.")
-
-        with col_t:
-            st.markdown(f'<div class="section-header"><span class="icon">✅</span> Action Items ({len(result.get("tasks", []))})</div>', unsafe_allow_html=True)
-            tasks = result.get("tasks", [])
-            if tasks:
-                for t in tasks:
-                    p = t.get("priority", "low")
-                    st.markdown(f"""
-                    <div class="task-card">
-                        <div class="task-text"><span class="priority-dot {p}"></span> {t['task'][:120]}</div>
-                        <div class="task-meta">
-                            <span>👤 {t['assignee']}</span>
-                            <span>📅 {t['deadline']}</span>
-                            <span class="priority-{p}">● {p.upper()}</span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.caption("No action items detected.")
+        # ── Decisions ──
+        st.markdown('<div class="section-header"><span class="icon">⚖️</span> Decisions Made</div>', unsafe_allow_html=True)
+        decisions = result.get("decisions", [])
+        if decisions:
+            for decision in decisions:
+                st.markdown(f'<div class="decision-card">{decision}</div>', unsafe_allow_html=True)
+        else:
+            st.caption("No formal decisions detected.")
+        st.caption("Review and update task owners, deadlines, and status in the Accountability Center.")
 
         st.divider()
 
@@ -1754,7 +1937,7 @@ elif page == "Results Dashboard":
                 fig = apply_professional_plotly_theme(fig)
                 fig.update_layout(height=max(200, len(topics) * 50), showlegend=False, coloraxis_showscale=False)
                 fig.update_traces(marker_line_width=0)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
         with col_sentiment:
             st.markdown('<div class="section-header"><span class="icon">💭</span> Speaker Sentiment</div>', unsafe_allow_html=True)
@@ -1767,8 +1950,13 @@ elif page == "Results Dashboard":
                                      marker_color="#34d399", marker_line_width=0))
                 fig.add_trace(go.Bar(name="Negative", x=names, y=[s["negative"] for s in speaker_sents.values()],
                                      marker_color="#f87171", marker_line_width=0))
-                fig.update_layout(**PLOTLY_LAYOUT, barmode="group", height=300, legend=dict(orientation="h", y=1.1))
-                st.plotly_chart(fig, use_container_width=True)
+                fig.update_layout(**{
+                    **PLOTLY_LAYOUT,
+                    "barmode": "group",
+                    "height": 300,
+                    "legend": dict(orientation="h", y=1.1),
+                })
+                st.plotly_chart(fig, width="stretch")
             else:
                 sentiment = result.get("sentiment", {})
                 st.metric("Overall Sentiment", sentiment.get("label", "neutral").capitalize())
@@ -1788,10 +1976,14 @@ elif page == "Results Dashboard":
                     color_discrete_sequence=COLORS,
                     hole=0.45,
                 )
-                fig.update_layout(**PLOTLY_LAYOUT, height=350, showlegend=True,
-                                  legend=dict(orientation="h", y=-0.1, font=dict(size=11)))
+                fig.update_layout(**{
+                    **PLOTLY_LAYOUT,
+                    "height": 350,
+                    "showlegend": True,
+                    "legend": dict(orientation="h", y=-0.1, font=dict(size=11)),
+                })
                 fig.update_traces(textinfo="percent+label", textfont_size=11)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
             with col_cards:
                 for i, p in enumerate(participants):
@@ -1839,7 +2031,7 @@ elif page == "Results Dashboard":
                 },
             ))
             fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font=dict(family="Inter"), height=280, margin=dict(l=30, r=30, t=60, b=20))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
         with col_breakdown:
             st.markdown('<div class="glass-card">', unsafe_allow_html=True)
@@ -1875,35 +2067,24 @@ elif page == "Results Dashboard":
 
 elif page == "Meetings":
     st.markdown('<h1 class="hero-header">Meetings</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">Your complete meeting history. Open a meeting to review its analysis.</p>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">Browse recent meetings. Use Knowledge Base to search inside transcripts and decisions.</p>', unsafe_allow_html=True)
 
     meetings = kb.list_meetings(limit=100)
     if not meetings:
         st.info("No meetings have been analyzed yet.")
     else:
-        meeting_query = st.text_input("Search meetings", placeholder="Search by meeting title...")
-        if meeting_query.strip():
-            query = meeting_query.lower()
-            meetings = [meeting for meeting in meetings if query in meeting.get("title", "").lower()]
-
-        st.caption(f"Showing {len(meetings)} meetings")
         for meeting in meetings:
             with st.container(border=True):
-                title_col, stats_col, action_col = st.columns([3, 2, 1])
+                title_col, action_col = st.columns([4, 1])
                 title_col.markdown(f"**{meeting['title']}**")
                 title_col.caption(str(meeting.get("date", ""))[:10])
-                stats_col.caption(
-                    f"{meeting.get('speakers_count', 0)} speakers · "
-                    f"{meeting.get('tasks_count', 0)} tasks · "
-                    f"Score {meeting.get('productivity_score', 0)}/100"
-                )
-                if action_col.button("Open", key=f"open_meeting_{meeting['id']}", use_container_width=True):
+                if meeting.get("recording_name"):
+                    title_col.caption(f"Recording available: {meeting['recording_name']}")
+                if action_col.button("Open", key=f"open_meeting_{meeting['id']}", width="stretch"):
                     full = kb.get(meeting["id"])
                     if full:
-                        st.session_state["current_result"] = full["analysis"]
-                        st.session_state["current_title"] = full["title"]
-                        st.session_state["current_transcript"] = full["transcript"]
-                        st.success("Meeting loaded. Open Meeting results from the sidebar.")
+                        load_meeting_into_session(full)
+                        st.success("Meeting loaded. Its analysis and media are now active.")
 
 
 # ═══════════════════════════════════════════
@@ -1955,18 +2136,39 @@ elif page == "Calendar":
 
 elif page == "Knowledge Base":
     st.markdown('<h1 class="hero-header">Knowledge Base</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">Search inside meeting transcripts, summaries, decisions, and action items.</p>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">Find a saved meeting, then load it to review its details in the relevant feature.</p>', unsafe_allow_html=True)
+
+    current_meeting_id = st.session_state.get("current_meeting_id")
+    if current_meeting_id is not None:
+        search_scope = st.selectbox(
+            "Search scope",
+            ["Loaded meeting", "All meetings"],
+            key=f"knowledge_base_scope_{current_meeting_id}",
+        )
+        scoped_meeting_id = (
+            current_meeting_id if search_scope == "Loaded meeting" else None
+        )
+    else:
+        scoped_meeting_id = None
+        st.caption("Search scope: All meetings")
 
     search_query = st.text_input("Search meeting content", placeholder="Try: budget, James, launch date, API...")
 
     if search_query:
-        meetings = kb.search(search_query)
+        meetings = kb.search(
+            search_query, limit=100, meeting_id=scoped_meeting_id
+        )
         st.caption(f"Found **{len(meetings)}** results for \"{search_query}\"")
     else:
         meetings = []
-        stored_count = len(kb.list_meetings())
+        stored_count = (
+            1 if scoped_meeting_id is not None else len(kb.list_meetings())
+        )
         if stored_count:
-            st.info(f"{stored_count} meetings are stored. Search for a topic, person, decision, or action item to find related records.")
+            if scoped_meeting_id is not None:
+                st.info("Search within the loaded meeting, or switch the scope to search all saved meetings.")
+            else:
+                st.info(f"{stored_count} meetings are stored. Search for a topic, person, decision, or action item.")
         else:
             st.info("Analyze a meeting first to build your searchable knowledge base.")
 
@@ -1979,35 +2181,34 @@ elif page == "Knowledge Base":
         """, unsafe_allow_html=True)
     else:
         for m in meetings:
-            score = m.get("productivity_score", 0)
-            sentiment = m.get("sentiment", "neutral")
-            sent_icon = {"positive": "😊", "negative": "😟", "neutral": "😐"}.get(sentiment, "😐")
+            with st.container(border=True):
+                st.markdown(f"**{m['title']}**")
+                st.caption(str(m.get("date", ""))[:10])
+                if m.get("recording_name"):
+                    st.caption(f"Recording: {m['recording_name']}")
 
-            with st.expander(f"📄 {m['title']} — {str(m.get('date', ''))[:10]}", expanded=False):
-                cols = st.columns(4)
-                cols[0].metric("✅ Tasks", m.get("tasks_count", 0))
-                cols[1].metric("⚖️ Decisions", m.get("decisions_count", 0))
-                cols[2].metric("🎯 Score", f"{score}/100")
-                cols[3].metric(f"{sent_icon} Sentiment", sentiment.capitalize())
-
-                summary = m.get("short_summary", "")
-                if summary:
-                    st.markdown(f"**Summary:** {summary}")
-                st.caption(f"📝 {m.get('word_count', 0)} words · 👥 {m.get('speakers_count', 0)} speakers")
-
-                btn1, btn2 = st.columns(2)
-                with btn1:
-                    if st.button("📂 Load Analysis", key=f"view_{m['id']}", use_container_width=True):
-                        full = kb.get(m["id"])
-                        if full:
-                            st.session_state["current_result"] = full["analysis"]
-                            st.session_state["current_title"] = full["title"]
-                            st.session_state["current_transcript"] = full["transcript"]
-                            st.success("✅ Loaded! Go to Results Dashboard.")
-                with btn2:
-                    if st.button("🗑️ Delete", key=f"del_{m['id']}", use_container_width=True, type="secondary"):
-                        kb.delete(m["id"])
-                        st.rerun()
+                load_col, delete_col = st.columns([3, 1])
+                if load_col.button(
+                    "Load meeting",
+                    key=f"view_{m['id']}",
+                    width="stretch",
+                ):
+                    full = kb.get(m["id"])
+                    if full:
+                        load_meeting_into_session(full)
+                        st.success("Meeting loaded. Its details are available in the relevant feature pages.")
+                    else:
+                        st.error("This meeting is no longer available.")
+                if delete_col.button(
+                    "Delete",
+                    key=f"del_{m['id']}",
+                    width="stretch",
+                    type="secondary",
+                ):
+                    kb.delete(m["id"])
+                    if st.session_state.get("current_meeting_id") == m["id"]:
+                        clear_active_meeting()
+                    st.rerun()
 
 
 # ═══════════════════════════════════════════
@@ -2016,7 +2217,29 @@ elif page == "Knowledge Base":
 
 elif page == "Memory Assistant":
     st.markdown('<h1 class="hero-header">Meeting Memory Assistant</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">Ask questions across your saved meeting history and discover what changed over time.</p>', unsafe_allow_html=True)
+    current_meeting_id = st.session_state.get("current_meeting_id")
+    if current_meeting_id is not None:
+        memory_scope = st.selectbox(
+            "Answer from",
+            ["Loaded meeting", "All meetings"],
+            key=f"memory_scope_{current_meeting_id}",
+        )
+        scoped_meeting_id = (
+            current_meeting_id if memory_scope == "Loaded meeting" else None
+        )
+        active_meeting = kb.get(current_meeting_id)
+        scope_description = (
+            f"Ask questions about {active_meeting['title']} or switch to all saved meetings."
+            if active_meeting
+            else "Ask questions about the loaded meeting or switch to all saved meetings."
+        )
+    else:
+        scoped_meeting_id = None
+        scope_description = "Ask questions across your saved meeting history."
+    st.markdown(
+        f'<p class="hero-sub">{scope_description}</p>',
+        unsafe_allow_html=True,
+    )
 
     examples = [
         "What decisions were made about the product launch?",
@@ -2024,17 +2247,19 @@ elif page == "Memory Assistant":
         "What risks appeared in recent meetings?",
     ]
     st.caption("Example questions: " + " · ".join(examples))
-    query = st.text_input("Ask your meeting history", placeholder="e.g. What did we agree to do about the API launch?")
+    query = st.text_input("Ask about the meeting", placeholder="e.g. What did we agree to do about the API launch?")
 
-    if st.button("🧠 Search Meeting Memory", type="primary", use_container_width=True):
+    if st.button("🧠 Search Meeting Memory", type="primary", width="stretch"):
         if not query.strip():
             st.warning("Enter a question first.")
         else:
-            with st.spinner("Searching saved meetings..."):
-                matches = retrieve_memory_matches(query)
+            with st.spinner("Searching meeting records..."):
+                matches = retrieve_memory_matches(
+                    query, meeting_id=scoped_meeting_id
+                )
                 st.session_state["memory_matches"] = matches
                 st.session_state["memory_query"] = query
-                st.session_state["memory_answer"] = answer_memory_question(query, matches) if matches else "No saved meetings matched your question."
+                st.session_state["memory_answer"] = answer_memory_question(query, matches) if matches else "No matching meeting contains enough information to answer that question."
 
     if st.session_state.get("memory_answer"):
         st.markdown('<div class="section-header"><span class="icon">💬</span> Answer</div>', unsafe_allow_html=True)
@@ -2052,8 +2277,19 @@ elif page == "Memory Assistant":
 
 elif page == "Accountability Center":
     st.markdown('<h1 class="hero-header">Accountability Center</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">Track commitments across meetings and surface delivery risk before deadlines slip.</p>', unsafe_allow_html=True)
-    tasks = get_accountability_tasks()
+    current_meeting_id = st.session_state.get("current_meeting_id")
+    task_scopes = ["Loaded meeting", "All meetings"] if current_meeting_id is not None else ["All meetings"]
+    task_scope = st.selectbox(
+        "Task scope",
+        task_scopes,
+        key=f"accountability_scope_{current_meeting_id or 'all'}",
+    )
+    scoped_meeting_id = current_meeting_id if task_scope == "Loaded meeting" else None
+    st.markdown(
+        '<p class="hero-sub">Track commitments from the selected meeting or across your saved meeting history.</p>',
+        unsafe_allow_html=True,
+    )
+    tasks = get_accountability_tasks(scoped_meeting_id)
     today = datetime.now().date()
     overdue = [task for task in tasks if task["due_date"] and task["due_date"] < today and task["status"] != "done"]
     at_risk = [task for task in tasks if task["due_date"] and 0 <= (task["due_date"] - today).days <= 2 and task["status"] != "done"]
@@ -2095,17 +2331,35 @@ elif page == "Quality Coach":
     st.markdown('<h1 class="hero-header">Meeting Quality Coach</h1>', unsafe_allow_html=True)
     st.markdown('<p class="hero-sub">Turn meeting analytics into specific improvements for your next conversation.</p>', unsafe_allow_html=True)
     meetings = kb.list_meetings()
+    current_meeting_id = st.session_state.get("current_meeting_id")
+    if current_meeting_id is not None:
+        coach_scope = st.selectbox(
+            "Coaching scope",
+            ["Loaded meeting", "All meetings"],
+            key=f"quality_coach_scope_{current_meeting_id}",
+        )
+        if coach_scope == "Loaded meeting":
+            meetings = [meeting for meeting in meetings if meeting["id"] == current_meeting_id]
     if meetings:
-        selected = st.selectbox("Choose a meeting to review", meetings, format_func=lambda meeting: f"{meeting['title']} · {str(meeting.get('date', ''))[:10]}")
+        if current_meeting_id is not None and coach_scope == "Loaded meeting":
+            selected = next(
+                (meeting for meeting in meetings if meeting["id"] == current_meeting_id),
+                None,
+            )
+        else:
+            selected = st.selectbox(
+                "Choose a meeting to review",
+                meetings,
+                index=next(
+                    (index for index, meeting in enumerate(meetings)
+                     if meeting["id"] == current_meeting_id),
+                    0,
+                ),
+                format_func=lambda meeting: f"{meeting['title']} · {str(meeting.get('date', ''))[:10]}",
+            )
         full = kb.get(selected["id"]) if selected else None
         if full:
             analysis = full["analysis"]
-            score = analysis.get("productivity_score", {})
-            cols = st.columns(4)
-            cols[0].metric("Productivity", f"{score.get('total', 0)}/100")
-            cols[1].metric("Actions", len(analysis.get("tasks", [])))
-            cols[2].metric("Decisions", len(analysis.get("decisions", [])))
-            cols[3].metric("Speakers", analysis.get("stats", {}).get("speaker_count", 0))
             st.markdown('<div class="section-header"><span class="icon">🧭</span> Recommended improvements</div>', unsafe_allow_html=True)
             for title, recommendation in quality_recommendations(analysis):
                 with st.container(border=True):
@@ -2121,10 +2375,25 @@ elif page == "Quality Coach":
 
 elif page == "Analytics":
     st.markdown('<h1 class="hero-header">Analytics Dashboard</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">A simple view of meeting patterns, follow-up, and team participation.</p>', unsafe_allow_html=True)
-    st.caption("Use these numbers to decide which meetings need better agendas, clearer owners, or follow-up reviews.")
+    current_meeting_id = st.session_state.get("current_meeting_id")
+    if current_meeting_id is not None:
+        analytics_scope = st.selectbox(
+            "Analytics scope",
+            ["Loaded meeting", "All meetings"],
+            key=f"analytics_scope_{current_meeting_id}",
+        )
+        scoped_meeting_id = (
+            current_meeting_id if analytics_scope == "Loaded meeting" else None
+        )
+    else:
+        st.info("Select a meeting in the sidebar to see meeting-specific metrics.")
+        scoped_meeting_id = None
+    st.markdown(
+        '<p class="hero-sub">Review transcript-grounded patterns and follow-up for the selected meeting, or switch to all saved meetings.</p>',
+        unsafe_allow_html=True,
+    )
 
-    data = analytics_engine.get_dashboard_data()
+    data = analytics_engine.get_dashboard_data(scoped_meeting_id)
     if not data:
         st.markdown("""
         <div class="empty-state">
@@ -2144,7 +2413,7 @@ elif page == "Analytics":
         ])
         st.caption("Meetings is the number analyzed. Total Tasks and Decisions count detected items. Avg Words indicates typical meeting length. Avg Score is the estimated productivity score out of 100.")
 
-        governance = get_governance_summary()
+        governance = get_governance_summary(scoped_meeting_id)
         st.markdown('<div class="section-header">Meeting governance</div>', unsafe_allow_html=True)
         st.caption("A practical view of whether meetings produce clear decisions and follow-up work.")
         governance_cols = st.columns(4)
@@ -2170,7 +2439,7 @@ elif page == "Analytics":
                           color_discrete_sequence=["#7c3aed"])
             fig.update_layout(**PLOTLY_LAYOUT, height=320, title="Estimated productivity score by meeting", yaxis_title="Score out of 100", xaxis_title="Meeting")
             fig.update_traces(line=dict(width=3), marker=dict(size=10))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
         # Action & Decision Trend
         action_trend = data.get("action_trend", [])
@@ -2182,8 +2451,16 @@ elif page == "Analytics":
                                  marker_color="#a78bfa", marker_line_width=0))
             fig.add_trace(go.Bar(name="Decisions", x=[a["title"] for a in action_trend], y=[a["decisions"] for a in action_trend],
                                  marker_color="#38bdf8", marker_line_width=0))
-            fig.update_layout(**PLOTLY_LAYOUT, barmode="group", height=320, title="Tasks and decisions per meeting", yaxis_title="Count", xaxis_title="Meeting", legend=dict(orientation="h", y=1.1))
-            st.plotly_chart(fig, use_container_width=True)
+            fig.update_layout(**{
+                **PLOTLY_LAYOUT,
+                "barmode": "group",
+                "height": 320,
+                "title": "Tasks and decisions per meeting",
+                "yaxis_title": "Count",
+                "xaxis_title": "Meeting",
+                "legend": dict(orientation="h", y=1.1),
+            })
+            st.plotly_chart(fig, width="stretch")
 
         col_a, col_b = st.columns(2)
         with col_a:
@@ -2195,7 +2472,7 @@ elif page == "Analytics":
                              color_discrete_map={"positive": "#34d399", "neutral": "#64748b", "negative": "#f87171"},
                              hole=0.45)
                 fig.update_layout(**PLOTLY_LAYOUT, height=300, showlegend=True)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
         with col_b:
             pf = data.get("participant_frequency", {})
@@ -2206,7 +2483,7 @@ elif page == "Analytics":
                              color=list(pf.values()), color_continuous_scale=[[0, "#4f46e5"], [1, "#a78bfa"]])
                 fig.update_layout(**PLOTLY_LAYOUT, height=300, showlegend=False, coloraxis_showscale=False)
                 fig.update_traces(marker_line_width=0)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
         tf = data.get("topic_frequency", {})
         if tf:
@@ -2216,7 +2493,7 @@ elif page == "Analytics":
                          color=list(tf.values())[:12], color_continuous_scale=[[0, "#0ea5e9"], [1, "#38bdf8"]])
             fig.update_layout(**PLOTLY_LAYOUT, height=320, showlegend=False, coloraxis_showscale=False)
             fig.update_traces(marker_line_width=0)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
 
 # ═══════════════════════════════════════════
@@ -2260,7 +2537,7 @@ elif page == "Generate Report":
         with col_llm_opt:
             use_llm_report = st.checkbox("🤖 Enhance with LLM", value=ollama_ok, disabled=not ollama_ok)
 
-        if st.button("📧 Generate Report", type="primary", use_container_width=True):
+        if st.button("📧 Generate Report", type="primary", width="stretch"):
             with st.spinner("✨ Generating report..."):
                 if "Email" in report_type:
                     if use_llm_report and ollama_ok:
@@ -2317,7 +2594,7 @@ elif page == "Generate Report":
             mime = "text/calendar" if ext == "ics" else "text/plain"
             st.download_button(f"⬇️ Download .{ext}", report,
                                file_name=f"meeting_report_{datetime.now().strftime('%Y%m%d_%H%M')}.{ext}",
-                               mime=mime, use_container_width=True)
+                               mime=mime, width="stretch")
 
 
 # ═══════════════════════════════════════════
@@ -2336,7 +2613,7 @@ elif page == "Settings":
     with col2:
         ollama_model = st.text_input("Model Name", value=config.OLLAMA_MODEL)
 
-    if st.button("🔌 Test Connection", use_container_width=True):
+    if st.button("🔌 Test Connection", width="stretch"):
         test_llm = OllamaEngine(ollama_url, ollama_model)
         if test_llm.is_available():
             st.success(f"✅ Connected! Model `{ollama_model}` is available.")
@@ -2372,7 +2649,7 @@ elif page == "Settings":
         config.WHISPER_MODEL = selected_whisper_model
         st.success(f"Configured active model: `{selected_whisper_model}`")
         
-    if st.button("📥 Download / Preload Model", use_container_width=True):
+    if st.button("📥 Download / Preload Model", width="stretch"):
         with st.spinner("Downloading Whisper model and loading into memory... (This might take a minute on first run)"):
             try:
                 # Preload pipeline
@@ -2387,7 +2664,7 @@ elif page == "Settings":
     mc = len(kb.list_meetings())
     st.metric("Stored Meetings", mc)
     if mc > 0:
-        if st.button("🗑️ Clear All Meetings", type="secondary", use_container_width=True):
+        if st.button("🗑️ Clear All Meetings", type="secondary", width="stretch"):
             for m in kb.list_meetings():
                 kb.delete(m["id"])
             st.success("✅ All meetings cleared.")

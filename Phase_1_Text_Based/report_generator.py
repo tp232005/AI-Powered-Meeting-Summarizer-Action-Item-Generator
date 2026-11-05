@@ -60,8 +60,8 @@ MARKDOWN_TEMPLATE = Template("""# 📋 Meeting Report: {{ title }}
 ## 🗂️ Discussion Topics
 {% for t in topics %}\
 ### Topic {{ loop.index }}: {{ t.topic }}
-- {{ t.sentences | length }} sentences discussed
-- Key sentences: _"{{ t.sentences[0][:120] }}..."_
+- {{ t.sentence_count }} sentences discussed
+- Key sentence: _"{{ t.sample_sentence[:120] }}..."_
 {% endfor %}
 
 ---
@@ -231,7 +231,20 @@ class ReportGenerator:
             "bullet_points": analysis.get("bullet_points", []),
             "decisions": analysis.get("decisions", []),
             "tasks": analysis.get("tasks", []),
-            "topics": analysis.get("topics", []),
+            "topics": [
+                {
+                    **topic,
+                    "sentence_count": topic.get(
+                        "sentence_count", len(topic.get("sentences", []))
+                    ),
+                    "sample_sentence": topic.get(
+                        "sample_sentence",
+                        topic.get("sentences", [""])[0]
+                        if topic.get("sentences") else "",
+                    ),
+                }
+                for topic in analysis.get("topics", [])
+            ],
             "risks": analysis.get("risks", []),
             "participants": analysis.get("participants", []),
             "sentiment": analysis.get("sentiment", {"label": "neutral"}),

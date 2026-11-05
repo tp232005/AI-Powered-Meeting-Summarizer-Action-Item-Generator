@@ -4,9 +4,14 @@ Uses FTS5 for full-text search across meetings.
 Thread-safe: each thread gets its own connection via threading.local().
 """
 import json
+import os
+import re
+import shutil
 import sqlite3
 import threading
+import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 import config
 
@@ -71,6 +76,11 @@ class KnowledgeBase:
                 sentiment TEXT,
                 productivity_score INTEGER DEFAULT 0,
                 word_count INTEGER DEFAULT 0,
+                recording_path TEXT,
+                recording_name TEXT,
+                recording_type TEXT,
+                recording_size INTEGER,
+                recording_duration REAL,
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
@@ -102,6 +112,11 @@ class KnowledgeBase:
             ("user_id", "INTEGER REFERENCES users(id)"),
             ("organization_id", "INTEGER REFERENCES organizations(id)"),
             ("visibility", "TEXT NOT NULL DEFAULT 'private'"),
+            ("recording_path", "TEXT"),
+            ("recording_name", "TEXT"),
+            ("recording_type", "TEXT"),
+            ("recording_size", "INTEGER"),
+            ("recording_duration", "REAL"),
         ):
             if name not in columns:
                 conn.execute(f"ALTER TABLE meetings ADD COLUMN {name} {definition}")
@@ -109,17 +124,67 @@ class KnowledgeBase:
 
     # ── CRUD Operations ──
 
-    def save(self, title: str, transcript: str, analysis: dict) -> int:
-        """Save a meeting and its analysis. Returns the meeting ID (Fix #6)."""
+    def save(
+        self,
+        title: str,
+        transcript: str,
+        analysis: dict,
+        recording_path: str = None,
+        recording_name: str = None,
+        recording_type: str = None,
+        recording_duration: float = None,
+    ) -> int:
+        """Save meeting text and analysis, with an optional managed recording file."""
         conn = self._get_conn()
+        stored_recording = None
         try:
+            if recording_path:
+                source = Path(recording_path)
+                if not source.is_file():
+                    raise FileNotFoundError(f"Meeting recording not found: {source}")
+                extension = source.suffix.lower()
+                if extension not in config.SUPPORTED_AUDIO_EXTENSIONS:
+                    raise ValueError(f"Unsupported recording format: {extension or 'unknown'}")
+                recording_size = source.stat().st_size
+                if recording_size <= 0 or recording_size > config.MAX_AUDIO_FILE_SIZE_BYTES:
+                    raise ValueError("Meeting recording is empty or exceeds the configured upload limit.")
+                media_type = recording_type or ("video" if extension in {
+                    ".mp4", ".mov", ".mkv", ".avi", ".flv", ".wmv"
+                } else "audio")
+                if media_type not in {"audio", "video"}:
+                    raise ValueError("Recording type must be audio or video.")
+                actor_id = getattr(self._actor, "user_id", None)
+                actor_directory = f"user_{actor_id}" if actor_id is not None else "unassigned"
+                relative_path = Path(actor_directory) / f"{uuid.uuid4().hex}{extension}"
+                recordings_root = Path(config.RECORDINGS_DIR).resolve()
+                destination = (recordings_root / relative_path).resolve()
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if not destination.is_relative_to(recordings_root):
+                    raise ValueError("Invalid meeting recording destination.")
+                temporary_destination = destination.with_suffix(destination.suffix + ".tmp")
+                try:
+                    shutil.copyfile(source, temporary_destination)
+                    os.replace(temporary_destination, destination)
+                finally:
+                    if temporary_destination.exists():
+                        temporary_destination.unlink()
+                stored_recording = {
+                    "path": relative_path.as_posix(),
+                    "name": Path(recording_name or source.name).name,
+                    "type": media_type,
+                    "size": recording_size,
+                    "duration": recording_duration,
+                    "destination": destination,
+                }
+
             cursor = conn.execute(
                 """INSERT INTO meetings
                    (title, date, transcript, analysis, user_id, organization_id, visibility,
                     short_summary, detailed_summary,
                     decisions_count, tasks_count, speakers_count, sentiment,
-                    productivity_score, word_count)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    productivity_score, word_count, recording_path, recording_name,
+                    recording_type, recording_size, recording_duration)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     title,
                     analysis.get("timestamp", datetime.now().isoformat()),
@@ -136,12 +201,19 @@ class KnowledgeBase:
                     analysis.get("sentiment", {}).get("label", "neutral"),
                     analysis.get("productivity_score", {}).get("total", 0),
                     analysis.get("stats", {}).get("word_count", 0),
+                    stored_recording["path"] if stored_recording else None,
+                    stored_recording["name"] if stored_recording else None,
+                    stored_recording["type"] if stored_recording else None,
+                    stored_recording["size"] if stored_recording else None,
+                    stored_recording["duration"] if stored_recording else None,
                 ),
             )
             conn.commit()
             return cursor.lastrowid
         except Exception:
             conn.rollback()
+            if stored_recording and stored_recording["destination"].exists():
+                stored_recording["destination"].unlink()
             raise
 
     def get(self, meeting_id: int) -> Optional[dict]:
@@ -163,20 +235,47 @@ class KnowledgeBase:
         rows = conn.execute(
             """SELECT id, title, date, short_summary, decisions_count,
                       tasks_count, speakers_count, sentiment,
-                      productivity_score, word_count, created_at
+                      productivity_score, word_count, recording_path,
+                      recording_name, recording_type, recording_size,
+                      recording_duration, created_at
                FROM meetings""" + scope + " ORDER BY created_at DESC LIMIT ? OFFSET ?",
             (*params, limit, offset),
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_recording_path(self, meeting_id: int) -> Optional[Path]:
+        """Return a meeting's recording path after enforcing actor scope and path containment."""
+        meeting = self.get(meeting_id)
+        if not meeting or not meeting.get("recording_path"):
+            return None
+        recordings_root = Path(config.RECORDINGS_DIR).resolve()
+        recording_path = (recordings_root / meeting["recording_path"]).resolve()
+        if not recording_path.is_relative_to(recordings_root):
+            raise ValueError("Stored meeting recording path is invalid.")
+        return recording_path if recording_path.is_file() else None
+
     def delete(self, meeting_id: int) -> bool:
         """Delete a meeting by ID. Returns True only if a row was deleted (Fix #4)."""
         conn = self._get_conn()
+        meeting = self.get(meeting_id)
         scope, params = self._scope()
         scope = scope.replace(" WHERE", " AND", 1) if scope else ""
         cursor = conn.execute(f"DELETE FROM meetings WHERE id = ?{scope}", (meeting_id, *params))
         conn.commit()
+        if cursor.rowcount > 0 and meeting and meeting.get("recording_path"):
+            recording_path = self.get_recording_path_for_record(meeting["recording_path"])
+            if recording_path and recording_path.exists():
+                recording_path.unlink()
         return cursor.rowcount > 0
+
+    @staticmethod
+    def get_recording_path_for_record(relative_path: str) -> Optional[Path]:
+        """Resolve a database recording reference without allowing paths outside the media root."""
+        recordings_root = Path(config.RECORDINGS_DIR).resolve()
+        recording_path = (recordings_root / relative_path).resolve()
+        if not recording_path.is_relative_to(recordings_root):
+            raise ValueError("Stored meeting recording path is invalid.")
+        return recording_path
 
     def update_task_status(self, meeting_id: int, task_index: int, status: str) -> bool:
         """Persist a task status inside a saved meeting analysis."""
@@ -201,38 +300,45 @@ class KnowledgeBase:
 
     # ── Search ──
 
-    def search(self, query: str, limit: int = 20) -> list:
-        """Full-text search across meetings."""
+    def search(self, query: str, limit: int = 20, meeting_id: int = None) -> list:
+        """Full-text search across meetings, optionally limited to one meeting."""
         conn = self._get_conn()
         scope, params = self._scope("m")
         scope = scope.replace(" WHERE", " AND") if scope else ""
-        try:
-            rows = conn.execute(
-                """SELECT m.id, m.title, m.date, m.short_summary,
-                          m.decisions_count, m.tasks_count, m.sentiment,
-                          m.productivity_score, m.word_count,
-                          rank
-                   FROM meetings_fts fts
-                   JOIN meetings m ON m.id = fts.rowid
-                         WHERE meetings_fts MATCH ?""" + scope + """
-                   ORDER BY rank
-                   LIMIT ?""",
-                     (query, *params, limit),
-            ).fetchall()
-            return [dict(r) for r in rows]
-        except sqlite3.OperationalError:
-            like_q = f"%{query}%"
-            fallback_scope = scope.replace("m.", "")
-            rows = conn.execute(
-                """SELECT id, title, date, short_summary,
-                          decisions_count, tasks_count, sentiment,
-                          productivity_score, word_count
-                   FROM meetings
-                         WHERE (title LIKE ? OR short_summary LIKE ? OR transcript LIKE ?)""" + fallback_scope + """
-                   ORDER BY created_at DESC LIMIT ?""",
-                     (like_q, like_q, like_q, *params, limit),
-            ).fetchall()
-            return [dict(r) for r in rows]
+        if meeting_id is not None:
+            scope += " AND m.id = ?"
+            params = (*params, meeting_id)
+        terms = re.findall(r"[\w'-]+", query.strip(), flags=re.UNICODE)
+        if not terms:
+            return []
+        fts_query = " OR ".join(f'"{term}"' for term in terms)
+        like_terms = [f"%{term}%" for term in terms]
+        analysis_conditions = " OR ".join("LOWER(m.analysis) LIKE LOWER(?)" for _ in terms)
+        columns = """m.id, m.title, m.date, m.short_summary, m.detailed_summary,
+                     m.decisions_count, m.tasks_count, m.speakers_count, m.sentiment,
+                     m.productivity_score, m.word_count, m.recording_path,
+                     m.recording_name, m.recording_type, m.recording_size,
+                     m.recording_duration"""
+        fts_rows = conn.execute(
+            f"""SELECT {columns}
+                FROM meetings_fts
+                JOIN meetings m ON m.id = meetings_fts.rowid
+                WHERE meetings_fts MATCH ?{scope}
+                ORDER BY rank
+                LIMIT ?""",
+            (fts_query, *params, limit),
+        ).fetchall()
+        analysis_rows = conn.execute(
+            f"""SELECT {columns}
+                FROM meetings m
+                WHERE ({analysis_conditions}){scope}
+                ORDER BY m.created_at DESC
+                LIMIT ?""",
+            (*like_terms, *params, limit),
+        ).fetchall()
+        matches = {row["id"]: dict(row) for row in analysis_rows}
+        matches.update({row["id"]: dict(row) for row in reversed(fts_rows)})
+        return list(matches.values())[:limit]
 
     # ── Analytics Aggregation ──
 

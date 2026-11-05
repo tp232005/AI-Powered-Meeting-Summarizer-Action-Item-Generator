@@ -18,7 +18,12 @@ class MeetingAnalytics:
         if not stats:
             return None
 
-        all_meetings = self.kb.get_all_analyses()
+        get_analytics_records = getattr(self.kb, "get_analytics_records", None)
+        all_meetings = (
+            get_analytics_records()
+            if callable(get_analytics_records)
+            else self.kb.get_all_analyses()
+        )
         if not all_meetings:
             return None
 
@@ -74,8 +79,8 @@ class MeetingAnalytics:
             analysis = m.get("analysis", {})
             trend.append({
                 "title": m.get("title", "Untitled")[:30],
-                "tasks": len(analysis.get("tasks", [])),
-                "decisions": len(analysis.get("decisions", [])),
+                "tasks": analysis.get("task_count", len(analysis.get("tasks", []))),
+                "decisions": analysis.get("decision_count", len(analysis.get("decisions", []))),
                 "date": m.get("date", ""),
             })
         return trend

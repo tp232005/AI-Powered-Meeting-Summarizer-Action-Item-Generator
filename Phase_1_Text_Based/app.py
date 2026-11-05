@@ -170,6 +170,7 @@ st.markdown("""
         align-items: center;
         gap: 10px;
     }
+
     .section-header .icon {
         font-size: 1.5rem;
     }
@@ -184,7 +185,7 @@ st.markdown("""
         font-size: 0.95rem;
         color: #e2e8f0;
     }
-
+  
     .task-card {
         background: rgba(15, 12, 41, 0.5);
         border: 1px solid rgba(124, 58, 237, 0.15);
@@ -193,6 +194,7 @@ st.markdown("""
         margin-bottom: 10px;
         transition: all 0.2s;
     }
+   
     .task-card:hover { border-color: rgba(124, 58, 237, 0.35); }
     .task-card .task-text { color: #e2e8f0; font-weight: 500; margin-bottom: 8px; }
     .task-card .task-meta { display: flex; gap: 16px; flex-wrap: wrap; }
@@ -203,7 +205,7 @@ st.markdown("""
         align-items: center;
         gap: 4px;
     }
-
+  
     .priority-high { color: #f87171 !important; }
     .priority-medium { color: #fbbf24 !important; }
     .priority-low { color: #34d399 !important; }
@@ -585,6 +587,17 @@ llm = get_llm()
 report_gen = ReportGenerator()
 analytics_engine = MeetingAnalytics(kb)
 
+
+@st.cache_data(ttl=30, max_entries=1, show_spinner=False)
+def get_cached_analytics_data():
+    return analytics_engine.get_dashboard_data()
+
+
+@st.cache_data(ttl=30, max_entries=4, show_spinner=False)
+def is_ollama_available(base_url: str, model: str) -> bool:
+    return OllamaEngine(base_url, model).is_available()
+
+
 # ── Plotly Dark Theme ──
 PLOTLY_LAYOUT = dict(
     paper_bgcolor="rgba(0,0,0,0)",
@@ -622,19 +635,13 @@ with st.sidebar:
 
     st.divider()
 
-    # Ollama status
-    ollama_ok = llm.is_available()
-    if ollama_ok:
-        st.markdown(f"✅ **Ollama**: `{config.OLLAMA_MODEL}`")
-    else:
-        st.markdown("⚠️ **Ollama**: Offline")
-        st.caption("Using rule-based NLP engine")
 
-    meeting_count = len(kb.list_meetings())
-    st.markdown(f"📂 **{meeting_count}** meetings stored")
-
-    st.markdown('<div class="version-badge">v3.0 · Research Edition</div>', unsafe_allow_html=True)
-
+# Check Ollama only on pages that use its status or generation features.
+ollama_ok = is_ollama_available(config.OLLAMA_BASE_URL, config.OLLAMA_MODEL) if page in {
+    "🏠 Analyze Meeting",
+    "📧 Generate Report",
+    "⚙️ Settings",
+} else False
 
 # ═══════════════════════════════════════════
 #  HELPER FUNCTIONS
@@ -729,6 +736,7 @@ if page == "🏠 Analyze Meeting":
 
             progress.progress(85, text="💾 Saving to Knowledge Base...")
             kb.save(title, transcript, result)
+            get_cached_analytics_data.clear()
 
             progress.progress(100, text="✅ Complete!")
             st.balloons()
@@ -848,10 +856,16 @@ elif page == "📊 Results Dashboard":
             topics = result.get("topics", [])
             if topics:
                 fig = px.bar(
-                    x=[len(t.get("sentences", [])) for t in topics],
+                    x=[
+                        t.get("sentence_count", len(t.get("sentences", [])))
+                        for t in topics
+                    ],
                     y=[f"{i+1}. {t['topic'][:25]}" for i, t in enumerate(topics)],
                     orientation="h",
-                    color=[len(t.get("sentences", [])) for t in topics],
+                    color=[
+                        t.get("sentence_count", len(t.get("sentences", [])))
+                        for t in topics
+                    ],
                     color_continuous_scale=[[0, "#4f46e5"], [0.5, "#7c3aed"], [1, "#a78bfa"]],
                 )
                 fig.update_layout(**PLOTLY_LAYOUT, height=max(200, len(topics) * 50), showlegend=False, coloraxis_showscale=False)
@@ -982,7 +996,7 @@ elif page == "📚 Knowledge Base":
         meetings = kb.search(search_query)
         st.caption(f"Found **{len(meetings)}** results for \"{search_query}\"")
     else:
-        meetings = kb.list_meetings()
+        meetings = kb.list_meetings(limit=20)
 
     if not meetings:
         st.markdown("""
@@ -993,21 +1007,10 @@ elif page == "📚 Knowledge Base":
         """, unsafe_allow_html=True)
     else:
         for m in meetings:
-            score = m.get("productivity_score", 0)
-            sentiment = m.get("sentiment", "neutral")
-            sent_icon = {"positive": "😊", "negative": "😟", "neutral": "😐"}.get(sentiment, "😐")
-
             with st.expander(f"📄 {m['title']} — {str(m.get('date', ''))[:10]}", expanded=False):
-                cols = st.columns(4)
-                cols[0].metric("✅ Tasks", m.get("tasks_count", 0))
-                cols[1].metric("⚖️ Decisions", m.get("decisions_count", 0))
-                cols[2].metric("🎯 Score", f"{score}/100")
-                cols[3].metric(f"{sent_icon} Sentiment", sentiment.capitalize())
-
                 summary = m.get("short_summary", "")
                 if summary:
                     st.markdown(f"**Summary:** {summary}")
-                st.caption(f"📝 {m.get('word_count', 0)} words · 👥 {m.get('speakers_count', 0)} speakers")
 
                 btn1, btn2 = st.columns(2)
                 with btn1:
@@ -1021,6 +1024,7 @@ elif page == "📚 Knowledge Base":
                 with btn2:
                     if st.button("🗑️ Delete", key=f"del_{m['id']}", use_container_width=True, type="secondary"):
                         kb.delete(m["id"])
+                        get_cached_analytics_data.clear()
                         st.rerun()
 
 
@@ -1032,7 +1036,7 @@ elif page == "📈 Analytics":
     st.markdown('<h1 class="hero-header">Analytics Dashboard</h1>', unsafe_allow_html=True)
     st.markdown('<p class="hero-sub">Cross-meeting insights and trends</p>', unsafe_allow_html=True)
 
-    data = analytics_engine.get_dashboard_data()
+    data = get_cached_analytics_data()
     if not data:
         st.markdown("""
         <div class="empty-state">
@@ -1190,6 +1194,10 @@ elif page == "⚙️ Settings":
 
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-header"><span class="icon">🤖</span> Ollama LLM Configuration</div>', unsafe_allow_html=True)
+    if ollama_ok:
+        st.success(f"Ollama is connected with `{config.OLLAMA_MODEL}`.")
+    else:
+        st.info("Ollama is offline. Meeting analysis will use the built-in NLP engine.")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -1217,6 +1225,7 @@ elif page == "⚙️ Settings":
         if st.button("🗑️ Clear All Meetings", type="secondary", use_container_width=True):
             for m in kb.list_meetings():
                 kb.delete(m["id"])
+            get_cached_analytics_data.clear()
             st.success("✅ All meetings cleared.")
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)

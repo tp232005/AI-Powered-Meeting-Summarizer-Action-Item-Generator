@@ -13,7 +13,6 @@ import nltk
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
 import config
@@ -77,24 +76,41 @@ class MeetingAnalyzer:
         has_speakers = len(speakers) > 0
         body_text = " ".join(u["speech"] for u in utterances) if has_speakers else transcript
 
-        # spaCy doc on full text
-        doc = self.nlp(body_text[:100000])  # limit for performance
-
         # Run all analysis modules
         sentences = sent_tokenize(transcript)
-        short_summary = self._summarize(transcript, config.SHORT_SUMMARY_SENTENCES)
-        detailed_summary = self._summarize(transcript, config.DETAILED_SUMMARY_SENTENCES)
-        bullet_points = self._extract_bullet_points(transcript, config.BULLET_POINTS_COUNT)
-        decisions = self._detect_decisions(transcript)
-        tasks = self._extract_tasks(transcript, speakers, doc)
-        topics = self._segment_topics(transcript)
-        keywords = self._extract_keywords(body_text)
-        risks = self._detect_risks(transcript)
-        participants = self._analyze_participants(speakers, utterances) if has_speakers else []
-        sentiment = self._analyze_sentiment(body_text)
-        speaker_sentiments = self._speaker_sentiments(speakers) if has_speakers else {}
-        readability = self._readability(transcript)
-        stats = self._compute_stats(transcript, utterances, sentences)
+        transcript_words = word_tokenize(transcript)
+        body_words = (
+            transcript_words
+            if body_text == transcript else word_tokenize(body_text)
+        )
+        speaker_words = {
+            name: word_tokenize(" ".join(speeches))
+            for name, speeches in speakers.items()
+        }
+        short_summary, detailed_summary = self._summarize_many(
+            sentences,
+            (config.SHORT_SUMMARY_SENTENCES, config.DETAILED_SUMMARY_SENTENCES),
+        )
+        bullet_points = self._extract_bullet_points(
+            transcript, config.BULLET_POINTS_COUNT, sentences
+        )
+        decisions = self._detect_decisions(transcript, sentences)
+        tasks = self._extract_tasks(transcript, speakers, sentences)
+        topics = self._segment_topics(transcript, sentences)
+        keywords = self._extract_keywords(body_text, tokens=body_words)
+        risks = self._detect_risks(transcript, sentences)
+        speaker_sentiments = (
+            self._speaker_sentiments(speakers, speaker_words) if has_speakers else {}
+        )
+        participants = (
+            self._analyze_participants(speakers, utterances, speaker_sentiments, speaker_words)
+            if has_speakers else []
+        )
+        sentiment = self._analyze_sentiment(body_text, body_words)
+        readability = self._readability(transcript, sentences, transcript_words)
+        stats = self._compute_stats(
+            transcript, utterances, sentences, transcript_words
+        )
         productivity_score = self._compute_productivity_score(
             tasks, decisions, participants, sentences, risks, readability
         )
@@ -156,40 +172,51 @@ class MeetingAnalyzer:
     def _summarize(self, text: str, n: int = 5) -> str:
         """TF-IDF extractive summarization with positional weighting."""
         sentences = sent_tokenize(text)
-        if len(sentences) <= n:
-            return " ".join(sentences)
+        return self._summarize_many(sentences, (n,))[0]
 
-        # Build TF-IDF matrix
+    def _summarize_many(self, sentences: list, lengths: tuple) -> list:
+        """Rank sentences once and reuse the ranking for every summary length."""
+        if all(len(sentences) <= length for length in lengths):
+            summary = " ".join(sentences)
+            return [summary for _ in lengths]
+
         try:
             vectorizer = TfidfVectorizer(stop_words="english", max_features=5000)
             tfidf_matrix = vectorizer.fit_transform(sentences)
         except ValueError:
-            return " ".join(sentences[:n])
+            return [
+                " ".join(sentences if len(sentences) <= length else sentences[:length])
+                for length in lengths
+            ]
 
-        # Score each sentence
         scores = []
         for i, sent in enumerate(sentences):
             tfidf_score = float(tfidf_matrix[i].sum())
-            # Positional weighting
             if i == 0 or i == len(sentences) - 1:
                 pos_w = 1.4
             elif i < len(sentences) * 0.2:
                 pos_w = 1.2
             else:
                 pos_w = 1.0
-            # Length penalty
             words = len(sent.split())
             len_w = 0.5 if words < 5 else (0.8 if words > 50 else 1.0)
             scores.append((i, tfidf_score * pos_w * len_w, sent))
 
-        # Select top N, maintain original order
-        top = sorted(scores, key=lambda x: x[1], reverse=True)[:n]
-        top = sorted(top, key=lambda x: x[0])
-        return " ".join(t[2].strip() for t in top)
+        ranked_indices = sorted(scores, key=lambda item: item[1], reverse=True)
+        summaries = []
+        for length in lengths:
+            if len(sentences) <= length:
+                summaries.append(" ".join(sentences))
+                continue
+            selected = sorted(ranked_indices[:length], key=lambda item: item[0])
+            summaries.append(" ".join(item[2].strip() for item in selected))
+        return summaries
 
-    def _extract_bullet_points(self, text: str, n: int = 8) -> list:
+    def _extract_bullet_points(
+        self, text: str, n: int = 8, sentences: list = None
+    ) -> list:
         """Extract key bullet points from the transcript."""
-        sentences = sent_tokenize(text)
+        sentences = sentences if sentences is not None else sent_tokenize(text)
         if len(sentences) <= n:
             return [s.strip() for s in sentences]
 
@@ -203,7 +230,11 @@ class MeetingAnalyzer:
         scored = []
         for sent in sentences:
             score = sum(2 for p in importance_patterns if p.search(sent))
-            words = [w.lower() for w in word_tokenize(sent) if w.isalpha() and w.lower() not in STOP_WORDS]
+            words = [
+                w.lower()
+                for w in word_tokenize(sent)
+                if w.isalpha() and w.lower() not in STOP_WORDS
+            ]
             score += len(words) * 0.05
             if len(sent.split()) < 5:
                 score *= 0.3
@@ -216,9 +247,9 @@ class MeetingAnalyzer:
     #  DECISION DETECTION
     # ═══════════════════════════════════════════
 
-    def _detect_decisions(self, text: str) -> list:
+    def _detect_decisions(self, text: str, sentences: list = None) -> list:
         """Detect decisions using multiple regex patterns."""
-        sentences = sent_tokenize(text)
+        sentences = sentences if sentences is not None else sent_tokenize(text)
         patterns = [re.compile(p, re.I) for p in config.DECISION_PATTERNS]
         decisions = []
         seen = set()
@@ -234,21 +265,17 @@ class MeetingAnalyzer:
     #  SMART TASK EXTRACTION
     # ═══════════════════════════════════════════
 
-    def _extract_tasks(self, text: str, speakers: dict, doc) -> list:
+    def _extract_tasks(
+        self, text: str, speakers: dict, sentences: list = None
+    ) -> list:
         """Extract tasks with person, description, deadline, and priority."""
-        sentences = sent_tokenize(text)
+        sentences = sentences if sentences is not None else sent_tokenize(text)
         action_patterns = [re.compile(p, re.I) for p in config.ACTION_PATTERNS]
         speaker_names = list(speakers.keys())
 
-        # Get date entities from spaCy
-        date_entities = {}
-        for ent in doc.ents:
-            if ent.label_ in ("DATE", "TIME"):
-                date_entities[ent.text.lower()] = ent.text
-
-        tasks = []
+        candidates = []
+        candidate_texts = []
         seen_tasks = set()
-
         for sent in sentences:
             if not any(p.search(sent) for p in action_patterns):
                 continue
@@ -259,13 +286,22 @@ class MeetingAnalyzer:
             sent_key = sent.strip().lower()[:80]
             if sent_key in seen_tasks:
                 continue
-
-            # Check similarity with existing
-            if any(self._jaccard(sent, t["task"]) > 0.65 for t in tasks):
+            if any(self._jaccard(sent, candidate) > 0.65 for candidate in candidate_texts):
                 continue
             seen_tasks.add(sent_key)
+            candidate_texts.append(sent)
+            candidates.append(sent)
 
-            # Extract assignee
+        if not candidates:
+            return []
+
+        task_docs = self.nlp.pipe(
+            candidates,
+            batch_size=64,
+            disable=["tagger", "parser", "attribute_ruler", "lemmatizer"],
+        )
+        tasks = []
+        for sent, sent_doc in zip(candidates, task_docs):
             assignee = "Team"
             for name in speaker_names:
                 first_name = name.split()[0]
@@ -273,10 +309,8 @@ class MeetingAnalyzer:
                     assignee = name
                     break
             # Also check spaCy PERSON entities
-            sent_doc = self.nlp(sent)
             for ent in sent_doc.ents:
                 if ent.label_ == "PERSON" and assignee == "Team":
-                    # Match against known speakers
                     for name in speaker_names:
                         if ent.text.lower() in name.lower() or name.lower() in ent.text.lower():
                             assignee = name
@@ -336,9 +370,9 @@ class MeetingAnalyzer:
     #  TOPIC SEGMENTATION
     # ═══════════════════════════════════════════
 
-    def _segment_topics(self, text: str) -> list:
+    def _segment_topics(self, text: str, sentences: list = None) -> list:
         """Segment meeting into topics using TF-IDF + cosine similarity."""
-        sentences = sent_tokenize(text)
+        sentences = sentences if sentences is not None else sent_tokenize(text)
         if len(sentences) < 4:
             return [{"topic": "General Discussion", "sentences": sentences, "keywords": []}]
 
@@ -350,10 +384,9 @@ class MeetingAnalyzer:
             return [{"topic": "General Discussion", "sentences": sentences, "keywords": []}]
 
         # Calculate similarity between consecutive sentences
-        similarities = []
-        for i in range(len(sentences) - 1):
-            sim = cosine_similarity(tfidf[i], tfidf[i + 1])[0][0]
-            similarities.append(sim)
+        similarities = (
+            tfidf[:-1].multiply(tfidf[1:]).sum(axis=1).A1.tolist()
+        )
 
         # Find topic boundaries (low similarity = topic change)
         threshold = np.mean(similarities) - 0.5 * np.std(similarities) if similarities else 0.1
@@ -387,9 +420,14 @@ class MeetingAnalyzer:
     #  KEYWORD EXTRACTION
     # ═══════════════════════════════════════════
 
-    def _extract_keywords(self, text: str, top: int = 20) -> list:
+    def _extract_keywords(
+        self, text: str, top: int = 20, tokens: list = None
+    ) -> list:
         """Extract keywords using TF-IDF scoring."""
-        words = [w.lower() for w in word_tokenize(text) if w.isalpha() and len(w) > 3 and w.lower() not in STOP_WORDS]
+        words = [
+            w.lower() for w in (tokens if tokens is not None else word_tokenize(text))
+            if w.isalpha() and len(w) > 3 and w.lower() not in STOP_WORDS
+        ]
         freq = Counter(words)
         return [{"word": w, "count": c} for w, c in freq.most_common(top)]
 
@@ -397,9 +435,9 @@ class MeetingAnalyzer:
     #  RISK DETECTION
     # ═══════════════════════════════════════════
 
-    def _detect_risks(self, text: str) -> list:
+    def _detect_risks(self, text: str, sentences: list = None) -> list:
         """Detect risks mentioned in the meeting."""
-        sentences = sent_tokenize(text)
+        sentences = sentences if sentences is not None else sent_tokenize(text)
         risk_patterns = [
             re.compile(r"\b(risk|risky|at risk)\b", re.I),
             re.compile(r"\b(concern|worried|worry|fear)\b", re.I),
@@ -432,7 +470,13 @@ class MeetingAnalyzer:
     #  PARTICIPANT CONTRIBUTION ANALYSIS
     # ═══════════════════════════════════════════
 
-    def _analyze_participants(self, speakers: dict, utterances: list) -> list:
+    def _analyze_participants(
+        self,
+        speakers: dict,
+        utterances: list,
+        speaker_sentiments: dict = None,
+        speaker_words: dict = None,
+    ) -> list:
         """Analyze each participant's contribution."""
         total_words = sum(len(speech.split()) for speeches in speakers.values() for speech in speeches)
         total_utterances = len(utterances)
@@ -444,10 +488,21 @@ class MeetingAnalyzer:
             full_text = " ".join(speeches)
 
             # Sentiment per speaker
-            sentiment = self._analyze_sentiment(full_text)
+            sentiment = (
+                speaker_sentiments[name]
+                if speaker_sentiments is not None
+                else self._analyze_sentiment(
+                    full_text,
+                    speaker_words.get(name) if speaker_words is not None else None,
+                )
+            )
 
             # Topics contributed to
-            topic_keywords = self._extract_keywords(full_text, top=5)
+            topic_keywords = self._extract_keywords(
+                full_text,
+                top=5,
+                tokens=speaker_words.get(name) if speaker_words is not None else None,
+            )
 
             participants.append({
                 "name": name,
@@ -466,9 +521,13 @@ class MeetingAnalyzer:
     #  SENTIMENT ANALYSIS
     # ═══════════════════════════════════════════
 
-    def _analyze_sentiment(self, text: str) -> dict:
+    def _analyze_sentiment(self, text: str, words: list = None) -> dict:
         """Lexicon-based sentiment analysis."""
-        words = [w.lower() for w in word_tokenize(text) if w.isalpha()]
+        words = [
+            w.lower()
+            for w in (words if words is not None else word_tokenize(text))
+            if w.isalpha()
+        ]
         pos = sum(1 for w in words if w in POSITIVE_WORDS)
         neg = sum(1 for w in words if w in NEGATIVE_WORDS)
         total = max(len(words), 1)
@@ -481,12 +540,15 @@ class MeetingAnalyzer:
             label = "neutral"
         return {"positive": pos, "negative": neg, "score": round(score, 4), "label": label, "total": total}
 
-    def _speaker_sentiments(self, speakers: dict) -> dict:
+    def _speaker_sentiments(self, speakers: dict, speaker_words: dict = None) -> dict:
         """Sentiment per speaker."""
         result = {}
         for name, speeches in speakers.items():
             full = " ".join(speeches)
-            s = self._analyze_sentiment(full)
+            s = self._analyze_sentiment(
+                full,
+                speaker_words.get(name) if speaker_words is not None else None,
+            )
             s["count"] = len(speeches)
             result[name] = s
         return result
@@ -495,10 +557,15 @@ class MeetingAnalyzer:
     #  READABILITY
     # ═══════════════════════════════════════════
 
-    def _readability(self, text: str) -> dict:
+    def _readability(
+        self, text: str, sentences: list = None, words: list = None
+    ) -> dict:
         """Flesch-Kincaid readability score."""
-        words = [w for w in word_tokenize(text) if w.isalpha()]
-        sentences = sent_tokenize(text)
+        words = [
+            w for w in (words if words is not None else word_tokenize(text))
+            if w.isalpha()
+        ]
+        sentences = sentences if sentences is not None else sent_tokenize(text)
         syllable_count = sum(self._count_syllables(w) for w in words)
         word_count = max(len(words), 1)
         sent_count = max(len(sentences), 1)
@@ -524,8 +591,17 @@ class MeetingAnalyzer:
     #  STATS
     # ═══════════════════════════════════════════
 
-    def _compute_stats(self, text: str, utterances: list, sentences: list) -> dict:
-        words = [w for w in word_tokenize(text) if w.isalpha()]
+    def _compute_stats(
+        self,
+        text: str,
+        utterances: list,
+        sentences: list,
+        words: list = None,
+    ) -> dict:
+        words = [
+            w for w in (words if words is not None else word_tokenize(text))
+            if w.isalpha()
+        ]
         speakers_set = set(u["speaker"] for u in utterances) if utterances else set()
         return {
             "word_count": len(words),

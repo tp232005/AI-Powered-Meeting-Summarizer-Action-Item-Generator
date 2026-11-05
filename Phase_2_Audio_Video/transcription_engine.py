@@ -46,6 +46,8 @@ class TranscriptionEngine:
             ".mov": "video/quicktime",
             ".mkv": "video/x-matroska",
             ".avi": "video/x-msvideo",
+            ".flv": "video/x-flv",
+            ".wmv": "video/x-ms-wmv",
         }
         return mime_map.get(ext, "application/octet-stream")
 
@@ -138,22 +140,50 @@ class TranscriptionEngine:
 
     @staticmethod
     def _estimate_duration(file_path: str) -> float:
-        """Estimate audio duration for long-file chunking decisions."""
+        """Read media duration so long recordings are always split before transcription."""
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext in {".wav", ".flac", ".ogg"}:
+            try:
+                info = sf.info(file_path)
+                if info.samplerate:
+                    return info.frames / info.samplerate
+            except (OSError, RuntimeError, ValueError):
+                pass
+
+        clip = None
         try:
+            if ext in {".mp4", ".mov", ".mkv", ".avi", ".flv", ".wmv", ".webm"}:
+                from moviepy.video.io.VideoFileClip import VideoFileClip
+
+                clip = VideoFileClip(file_path)
+                return float(clip.duration or 0)
             from moviepy.audio.io.AudioFileClip import AudioFileClip
 
             clip = AudioFileClip(file_path)
-            duration = float(clip.duration)
-            clip.close()
-            return duration
+            return float(clip.duration or 0)
         except Exception:
             return 0.0
+        finally:
+            if clip is not None:
+                clip.close()
+
+    @staticmethod
+    def _api_chunk_duration(file_path: str, duration: float, preferred_seconds: int) -> int:
+        """Keep uncompressed audio chunks below common speech API upload limits."""
+        if duration <= 0:
+            return preferred_seconds
+        bytes_per_second = os.path.getsize(file_path) / duration
+        if bytes_per_second <= 0:
+            return preferred_seconds
+        safe_seconds = int((20 * 1024 * 1024) / bytes_per_second)
+        return max(30, min(preferred_seconds, safe_seconds))
 
     def _segment_audio_file(self, file_path: str, max_duration_sec: int = 600) -> list[str]:
         """Split long recordings into manageable chunks in chronological order."""
         os.makedirs(config.TEMP_DIR, exist_ok=True)
         segment_paths: list[str] = []
         chunk_count = 0
+        soundfile_error = None
 
         # Use soundfile directly for PCM-style formats. This avoids MoviePy's
         # external reader process and is reliable for long WAV test recordings.
@@ -163,14 +193,28 @@ class TranscriptionEngine:
                     total_frames = len(source)
                     sample_rate = source.samplerate
                     frames_per_chunk = max_duration_sec * sample_rate
+                    if total_frames <= frames_per_chunk:
+                        return [file_path]
                     for start_frame in range(0, total_frames, frames_per_chunk):
                         source.seek(start_frame)
-                        audio = source.read(frames_per_chunk, dtype="float32", always_2d=False)
+                        audio = source.read(frames_per_chunk, dtype="float32", always_2d=True)
+                        if audio.ndim > 1:
+                            audio = audio.mean(axis=1)
+                        if sample_rate != 16000:
+                            from math import gcd
+                            from scipy.signal import resample_poly
+
+                            divisor = gcd(sample_rate, 16000)
+                            audio = resample_poly(
+                                audio,
+                                16000 // divisor,
+                                sample_rate // divisor,
+                            )
                         segment_path = os.path.join(
                             config.TEMP_DIR,
                             f"segment_{uuid.uuid4().hex}_{chunk_count}.wav",
                         )
-                        sf.write(segment_path, audio, sample_rate, subtype="PCM_16")
+                        sf.write(segment_path, audio, 16000, subtype="PCM_16")
                         segment_paths.append(segment_path)
                         chunk_count += 1
                 return segment_paths or [file_path]
@@ -180,14 +224,29 @@ class TranscriptionEngine:
                         os.remove(segment_path)
                     except OSError:
                         pass
-                raise ValueError(f"Unable to segment the audio file for processing: {exc}") from exc
+                soundfile_error = exc
 
+        source_clip = None
+        audio_clip = None
+        audio_chunks = []
         try:
-            from moviepy.audio.io.AudioFileClip import AudioFileClip
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext in {".mp4", ".mov", ".mkv", ".avi", ".flv", ".wmv", ".webm"}:
+                from moviepy.video.io.VideoFileClip import VideoFileClip
 
-            clip = AudioFileClip(file_path)
-            total_duration = float(clip.duration)
-            segment_method = getattr(clip, "subclipped", None) or getattr(clip, "subclip", None)
+                source_clip = VideoFileClip(file_path)
+                audio_clip = source_clip.audio
+                if audio_clip is None:
+                    raise ValueError("The uploaded video file has no audio channel.")
+            else:
+                from moviepy.audio.io.AudioFileClip import AudioFileClip
+
+                audio_clip = AudioFileClip(file_path)
+
+            total_duration = float(audio_clip.duration or 0)
+            if total_duration <= max_duration_sec:
+                return [file_path]
+            segment_method = getattr(audio_clip, "subclipped", None) or getattr(audio_clip, "subclip", None)
             if segment_method is None:
                 raise ValueError("The installed MoviePy version does not support audio segmentation.")
 
@@ -195,26 +254,35 @@ class TranscriptionEngine:
                 end = min(start + max_duration_sec, total_duration)
                 segment_path = os.path.join(config.TEMP_DIR, f"segment_{uuid.uuid4().hex}_{chunk_count}.wav")
                 chunk = segment_method(start, end)
-                chunk.write_audiofile(segment_path, fps=16000, codec='pcm_s16le', logger=None)
-                chunk.close()
+                chunk.write_audiofile(
+                    segment_path,
+                    fps=16000,
+                    codec="pcm_s16le",
+                    ffmpeg_params=["-ac", "1"],
+                    logger=None,
+                )
+                audio_chunks.append(chunk)
                 segment_paths.append(segment_path)
                 chunk_count += 1
-            clip.close()
+            if not segment_paths:
+                return [file_path]
         except Exception as exc:
-            try:
-                clip.close()
-            except (UnboundLocalError, AttributeError):
-                pass
             for segment_path in segment_paths:
                 if os.path.exists(segment_path):
                     try:
                         os.remove(segment_path)
                     except OSError:
                         pass
-            raise ValueError(f"Unable to segment the audio file for processing: {exc}") from exc
+            detail = f"{exc}"
+            if soundfile_error:
+                detail = f"{detail} (PCM reader error: {soundfile_error})"
+            raise ValueError(f"Unable to segment the audio file for processing: {detail}") from exc
+        finally:
+            if source_clip is not None:
+                source_clip.close()
+            elif audio_clip is not None:
+                audio_clip.close()
 
-        if not segment_paths:
-            segment_paths.append(file_path)
         return segment_paths
 
     def _transcribe_local_whisper(self, file_path: str, model_name: str = None) -> str:
@@ -281,7 +349,9 @@ class TranscriptionEngine:
 
     def _transcribe_with_openai_chunked(self, file_path: str) -> str:
         """Fallback for large meetings: segment audio and combine transcripts chronologically."""
-        segments = self._segment_audio_file(file_path, max_duration_sec=600)
+        duration = self._estimate_duration(file_path)
+        chunk_duration = self._api_chunk_duration(file_path, duration, 600)
+        segments = self._segment_audio_file(file_path, max_duration_sec=chunk_duration)
         combined: list[str] = []
 
         try:
@@ -348,9 +418,14 @@ class TranscriptionEngine:
         """
         self.validate_audio_file(file_path)
         duration = self._estimate_duration(file_path)
-        chunk_paths = self._segment_audio_file(
-            file_path, config.AUDIO_CHUNK_SECONDS
-        ) if duration > config.AUDIO_CHUNK_SECONDS else [file_path]
+        chunk_duration = (
+            self._api_chunk_duration(file_path, duration, config.AUDIO_CHUNK_SECONDS)
+            if self._has_openai_api_key()
+            else config.AUDIO_CHUNK_SECONDS
+        )
+        chunk_paths = self._segment_audio_file(file_path, chunk_duration)
+        if duration <= 0:
+            duration = sum(self._estimate_duration(path) for path in chunk_paths)
         chunks = []
         try:
             for index, chunk_path in enumerate(chunk_paths):
@@ -364,8 +439,8 @@ class TranscriptionEngine:
                         ) from exc
                 else:
                     text = self._transcribe_local_whisper(chunk_path, model_name)
-                start = index * config.AUDIO_CHUNK_SECONDS
-                end = min(start + config.AUDIO_CHUNK_SECONDS, duration) if duration else start
+                start = index * chunk_duration
+                end = min(start + chunk_duration, duration) if duration else start + chunk_duration
                 turns = self.parse_speaker_turns(text)
                 for turn in turns:
                     chunks.append({
