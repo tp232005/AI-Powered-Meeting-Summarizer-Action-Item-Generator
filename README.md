@@ -39,7 +39,7 @@ The readiness score is a transparent heuristic based on detected analysis signal
 
 - **Accountability Center:** track task owners, due dates, status, and overdue follow-ups across meetings.
 - **Calendar:** create reminders and export events as an iCalendar (`.ics`) file.
-- **Knowledge Base:** save meeting records in SQLite and search transcripts, summaries, decisions, and tasks using full-text search.
+- **Knowledge Base:** save searchable meeting text and analysis in SQLite/FTS5 and keep uploaded original audio/video as replayable files.
 - **Memory Assistant:** retrieve relevant past meeting context and show the meetings used as sources for an answer.
 - **Quality Coach:** receive practical recommendations based on meeting analysis, including participation balance and risk follow-through.
 - **Analytics Dashboard:** explore trends in productivity, topics, participants, tasks, decisions, risks, and meeting durations.
@@ -120,7 +120,7 @@ flowchart LR
 4. The NLP engine analyzes the transcript and builds summaries and structured meeting signals.
 5. Ollama can optionally enrich the results when enabled and available.
 6. The transcript and analysis are saved to the local SQLite knowledge base.
-7. Dashboard pages use the saved analysis for meeting review, readiness triage, recall, accountability, analytics, and reporting.
+7. Dashboard pages use the selected saved meeting by default; analytics, coaching, and task tracking can be explicitly widened to all meetings.
 
 ## Technology stack
 
@@ -133,7 +133,7 @@ flowchart LR
 | Speech-to-text | OpenAI API, faster-whisper, Transformers/Whisper | Remote or local audio transcription |
 | Media handling | MoviePy, SoundFile | Audio/video duration and audio chunk processing |
 | Optional LLM | Ollama | Local model-based meeting-analysis enrichment |
-| Persistence and search | SQLite, FTS5 | Users, organizations, meeting records, and full-text search |
+| Persistence and search | SQLite, FTS5, filesystem media store | Searchable transcripts/analysis and meeting metadata in SQLite; original recordings stored as files |
 | Reports and configuration | Jinja2, python-dotenv | Report templates and environment configuration |
 | Quality checks | pytest | Unit and integration tests |
 
@@ -195,7 +195,7 @@ The current Streamlit app can be deployed from this GitHub repository:
    This can be omitted if you only want to try transcript-based analysis. Keep API keys in Community Cloud secrets; do not put them in source files or commit a `secrets.toml`.
 4. Choose **Deploy** and wait for the first build. The first startup may take longer while NLP resources are downloaded.
 
-This setup is intended for a public demo with sample or otherwise non-sensitive meeting data. The SQLite database and uploaded files are stored on the app's local filesystem, which Community Cloud does not provide as durable storage; data may be lost when the app restarts or is redeployed. Do not use this deployment for confidential transcripts or as a production record system. Ollama is optional and its default `localhost` URL will not refer to your own computer from the hosted app.
+This setup is intended for a public demo with sample or otherwise non-sensitive meeting data. The SQLite database and recording files are stored on the app's local filesystem, which Community Cloud does not provide as durable storage; data may be lost when the app restarts or is redeployed. Do not use this deployment for confidential transcripts or as a production record system. Ollama is optional and its default `localhost` URL will not refer to your own computer from the hosted app.
 
 ## Configuration
 
@@ -203,14 +203,16 @@ The repository includes `.env.example`. Copy it to `.env` in the repository root
 
 | Variable | Default | Description |
 |---|---|---|
-| `SPEECH_TO_TEXT_API_KEY` | Unset | Optional OpenAI speech-to-text credential. `OPENAI_API_KEY` is also recognized. When configured, the app prefers the API and can fall back to local Whisper if a transcription request fails. |
+| `SPEECH_TO_TEXT_API_KEY` | Unset | Optional OpenAI speech-to-text credential. `OPENAI_API_KEY` is also recognized. When set, the app uses the API and reports transcription errors instead of silently switching backends; without it, local Whisper is used. |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama server URL for optional LLM enrichment. |
 | `OLLAMA_MODEL` | `llama3.2` | Ollama model name. |
 | `WHISPER_MODEL` | `openai/whisper-tiny.en` | Local English Whisper model. |
-| `MAX_AUDIO_FILE_SIZE_MB` | `30` | Maximum accepted upload size in megabytes. |
-| `AUDIO_CHUNK_SECONDS` | `180` | Recording chunk size used for long audio processing. |
+| `MAX_AUDIO_FILE_SIZE_MB` | `1024` | Maximum accepted audio/video upload size in megabytes. Streamlit upload size is configured to the same limit. |
+| `AUDIO_CHUNK_SECONDS` | `180` | Audio chunk size for transcription; long audio/video recordings are transcribed chronologically in chunks. |
 | `TRANSCRIPT_CHUNK_CHARS` | `12000` | Character limit for transcript analysis chunks. |
 | `DEFAULT_OUTPUT_LANGUAGE` | `English` | Kept English-only by the current application workflow. |
+| `MEETING_DATABASE_PATH` | `Phase_2_Audio_Video/meeting_knowledge_base.db` | Optional SQLite database location. |
+| `MEETING_RECORDINGS_DIR` | `Phase_2_Audio_Video/recordings` | Optional persistent directory for original audio/video recordings. |
 
 Local Whisper models and NLP resources may require a first-run download. The local model can require substantial disk space and processing time. API-based transcription sends the uploaded recording to the configured provider; use local transcription where required by your organization’s data-handling policies.
 
@@ -219,11 +221,12 @@ Local Whisper models and NLP resources may require a first-run download. The loc
 1. Create or sign in to a workspace account.
 2. Open **Analyze Meeting** and enter a meeting title.
 3. Paste an English transcript or upload an audio/video recording.
-4. For recordings, review the transcript and then start analysis.
+4. For recordings, click **Transcribe**, review the complete generated transcript, then start analysis. The original recording is stored alongside its meeting and can be replayed from the dashboard or meeting archive.
 5. Review the summaries, decisions, tasks, risks, and **Meeting Readiness & Dependency Radar** on the Results Dashboard.
-6. Continue in **Accountability Center**, **Calendar**, **Knowledge Base**, **Memory Assistant**, **Quality Coach**, **Analytics**, or **Generate Report** as needed.
+6. Use **Active meeting** in the sidebar to switch the record used by meeting-specific dashboards, tasks, analytics, and reports. Analytics, coaching, and task tracking also provide an explicit all-meetings view.
+7. Search the **Meetings** or **Knowledge Base** pages by title, transcript terms, decisions, or action-item text to open the full meeting details.
 
-Supported recording extensions are configured in `Phase_2_Audio_Video/config.py` and include MP3, WAV, M4A, MP4, WEBM, OGG, FLAC, MOV, MKV, and AVI.
+Supported recording extensions are configured in `Phase_2_Audio_Video/config.py` and include MP3, WAV, M4A, MP4, WEBM, OGG, FLAC, MOV, MKV, AVI, FLV, and WMV. One-hour meetings are processed in chronological audio chunks rather than sent as a single oversized transcription request.
 
 ## Project structure
 
@@ -252,7 +255,7 @@ Supported recording extensions are configured in `Phase_2_Audio_Video/config.py`
     └── test_*.py
 ```
 
-Runtime data, including `meeting_knowledge_base.db` and temporary uploads, is generated locally under the Phase 2 application directory and is excluded from Git.
+Runtime data, including `meeting_knowledge_base.db`, temporary uploads, and original recordings, is generated locally under the Phase 2 application directory and is excluded from Git. SQLite stores searchable text and metadata; media bytes remain in the recordings directory so they are not embedded in database rows.
 
 ## Testing
 
@@ -272,9 +275,10 @@ python -m pytest test_audio_transcription.py test_kb.py test_calendar.py test_se
 
 ## Privacy and limitations
 
-- The default knowledge base is a local SQLite database. Protect the host machine and its database files appropriately.
+- The default knowledge base is a local SQLite database plus a local recordings directory. Back up both together; deleting a meeting removes its managed recording.
 - When an OpenAI speech-to-text key is configured, recordings may be sent to the OpenAI API. Review provider terms and your organization’s policies before processing confidential content.
 - Ollama enrichment uses the configured Ollama endpoint; by default, this is a local service.
 - Speaker attribution depends on speaker labels in the transcript or transcription output. The project should not be treated as a guaranteed speaker-identification service.
 - NLP extraction and the readiness score are aids for review. Confirm decisions, owners, dates, risks, and readiness with meeting participants.
+- Local filesystem storage is suitable for a persistent local server. Streamlit Community Cloud's local filesystem is ephemeral; use durable mounted storage/object storage before relying on hosted recordings or as a production record system.
 - Authentication and organization scoping are implemented for this application prototype; assess deployment, security, backups, and access controls before exposing it to production users.
