@@ -15,7 +15,7 @@ def _get_setting(name, default=None):
 
     try:
         return st.secrets.get(name, default)
-    except FileNotFoundError:
+    except Exception:
         return default
 
 
@@ -89,10 +89,11 @@ DECISION_PATTERNS = [
 
 # ── Action Patterns ──
 ACTION_PATTERNS = [
-    r"\b(will|shall|must|needs?\s+to|going\s+to|plan\s+to)\s+[^.!?]{5,100}",
-    r"\b(action item|follow.?up|task|assigned to)\s*[:–]?\s*[^.!?]{5,100}",
-    r"\b(please|can you|could you)\s+[^.!?]{5,100}",
-    r"\b(complete|finish|deliver|submit|send|prepare|create|build|implement|review|approve|schedule|coordinate|update|draft|share|set up|organize)\s+[^.!?]{3,100}",
+    r"^(?:check|verify|test|review|prepare|complete|finish|deliver|submit|send|"
+    r"create|build|implement|approve|schedule|coordinate|update|draft|share|"
+    r"set\s+up|organize|confirm|summarize|circulate|compare|analy[sz]e|inspect|"
+    r"monitor|track|measure|collect|design|write|contact|notify|document|"
+    r"publish|validate|deploy|fix|resolve|take|flag)\b",
 ]
 
 # ── Streamlit Theme ──

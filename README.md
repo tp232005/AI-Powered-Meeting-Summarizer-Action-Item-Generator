@@ -37,7 +37,7 @@ The readiness score is a transparent heuristic based on detected analysis signal
 
 ### Follow-through and organizational memory
 
-- **Accountability Center:** track task owners, due dates, status, and overdue follow-ups across meetings.
+- **Accountability Center:** track task owners, due dates, status, and overdue follow-ups for a selected meeting or across saved meetings.
 - **Calendar:** create reminders and export events as an iCalendar (`.ics`) file.
 - **Knowledge Base:** save searchable meeting text and analysis in SQLite/FTS5 and keep uploaded original audio/video as replayable files.
 - **Memory Assistant:** retrieve relevant past meeting context and show the meetings used as sources for an answer.
@@ -221,9 +221,9 @@ Local Whisper models and NLP resources may require a first-run download. The loc
 1. Create or sign in to a workspace account.
 2. Open **Analyze Meeting** and enter a meeting title.
 3. Paste an English transcript or upload an audio/video recording.
-4. For recordings, click **Transcribe**, review the complete generated transcript, then start analysis. The original recording is stored alongside its meeting and can be replayed from the dashboard or meeting archive.
+4. For recordings, click **Transcribe**, review and correct the generated transcript if needed, then start analysis. The original recording is stored alongside its meeting and can be replayed from the Knowledge Base.
 5. Review the summaries, decisions, tasks, risks, and **Meeting Readiness & Dependency Radar** on the Results Dashboard.
-6. Use **Active meeting** in the sidebar to switch the record used by meeting-specific dashboards, tasks, analytics, and reports. Analytics, coaching, and task tracking also provide an explicit all-meetings view.
+6. Use **Active meeting** in the sidebar for meeting-specific pages. The Accountability Center also has a meeting selector that shows which saved record its task count uses; choose **All meetings** to aggregate task history.
 7. Search the **Meetings** or **Knowledge Base** pages by title, transcript terms, decisions, or action-item text to open the full meeting details.
 
 Supported recording extensions are configured in `Phase_2_Audio_Video/config.py` and include MP3, WAV, M4A, MP4, WEBM, OGG, FLAC, MOV, MKV, AVI, FLV, and WMV. One-hour meetings are processed in chronological audio chunks rather than sent as a single oversized transcription request.

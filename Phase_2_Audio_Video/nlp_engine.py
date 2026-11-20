@@ -32,7 +32,14 @@ except OSError as exc:
         "The spaCy English model is missing. Install dependencies from requirements.txt."
     ) from exc
 
-STOP_WORDS = set(stopwords.words("english"))
+try:
+    STOP_WORDS = set(stopwords.words("english"))
+except Exception:
+    try:
+        from spacy.lang.en.stop_words import STOP_WORDS as SPACY_STOP_WORDS
+        STOP_WORDS = set(SPACY_STOP_WORDS)
+    except Exception:
+        STOP_WORDS = set()
 
 # ── Sentiment Lexicons ──
 POSITIVE_WORDS = {
@@ -56,12 +63,35 @@ NEGATIVE_WORDS = {
     "denied", "obstacle", "threat", "danger", "shortage", "turnover",
 }
 
+TASK_LIST_PREFIX_PATTERN = re.compile(
+    r"^(?:[-*]\s*|\d+[.)]\s*|(?:first|second|third|fourth|fifth|sixth|seventh|"
+    r"eighth|ninth|tenth|finally|lastly)\b[,:.)]?\s*)",
+    re.I,
+)
+ACTION_SECTION_START_PATTERN = re.compile(
+    r"\blet(?:'s)?\s+discuss\s+(?:the\s+)?action items\b",
+    re.I,
+)
+ACTION_SECTION_TITLE_PATTERN = re.compile(
+    r"^\s*(?:\d+[.)]\s*)?action items?(?:\s+and responsibilities)?\s*[:.]?\s*$",
+    re.I,
+)
+ACTION_SECTION_END_PATTERN = re.compile(
+    r"\blet(?:'s)?\s+discuss\s+(?:the\s+)?(?:overall\s+)?"
+    r"(?:timeline|deadlines|next steps)\b",
+    re.I,
+)
+
 
 class MeetingAnalyzer:
     """Full meeting analysis pipeline."""
 
     def __init__(self):
         self.nlp = _nlp
+        self.action_patterns = [re.compile(pattern, re.I) for pattern in config.ACTION_PATTERNS]
+
+    def _starts_with_task_verb(self, text: str) -> bool:
+        return any(pattern.match(text) for pattern in self.action_patterns)
 
     # ═══════════════════════════════════════════
     #  PUBLIC API
@@ -320,10 +350,105 @@ class MeetingAnalyzer:
     #  SMART TASK EXTRACTION
     # ═══════════════════════════════════════════
 
+    def _is_action_item_candidate(self, sentence: str, speaker_names: list) -> bool:
+        """Keep explicit assignments, requests, and clearly enumerated tasks."""
+        candidate = re.sub(r"^\[\d{1,2}:\d{2}(?::\d{2})?\]\s*", "", sentence.strip())
+        for name in sorted(speaker_names, key=len, reverse=True):
+            candidate = re.sub(
+                rf"^{re.escape(name)}\s*:\s*", "", candidate, flags=re.I
+            )
+
+        list_prefix = TASK_LIST_PREFIX_PATTERN.match(candidate)
+        if list_prefix:
+            candidate = candidate[list_prefix.end():].lstrip()
+            candidate = re.sub(
+                r"^(?:action item|task)\s*(?::|-)?\s*", "", candidate, flags=re.I
+            )
+            candidate = re.sub(
+                r"^(?:(?:(?:I|we|you)\s+)?"
+                r"(?:will|shall|must|should|need to|needs to|plan to|"
+                r"am going to|are going to)\s+|(?:I|we|you)['’]ll\s+)",
+                "",
+                candidate,
+                flags=re.I,
+            )
+            candidate = re.sub(r"^(?:I|we|you)\s+", "", candidate, flags=re.I)
+            return self._starts_with_task_verb(candidate)
+
+        commitment_patterns = [
+            r"I\s+(?:will|shall|must|need to|needs to|plan to|plans to|am going to)",
+            r"I['’](?:ll|m going to)",
+        ]
+        commitment_patterns.extend(
+            rf"{re.escape(name)}\s+(?:will|shall|must|need to|needs to|"
+            r"plan to|plans to|is going to)"
+            for name in speaker_names
+        )
+        commitment = re.match(
+            rf"^(?:{'|'.join(commitment_patterns)})\s+",
+            candidate,
+            flags=re.I,
+        )
+        if commitment:
+            return self._starts_with_task_verb(candidate[commitment.end():])
+
+        request = re.match(
+            r"^(?:[A-Z][A-Za-z'-]+,\s*)?(?:please|can you|could you)\s+",
+            candidate,
+            flags=re.I,
+        )
+        if request:
+            return self._starts_with_task_verb(candidate[request.end():])
+
+        return False
+
+    @staticmethod
+    def _action_item_section_sentences(text: str) -> list:
+        sentences = sent_tokenize(text)
+        numbered_sentences = []
+        pending_number = None
+        for sentence in sentences:
+            if re.fullmatch(r"\s*\d+[.)]\s*", sentence):
+                pending_number = sentence.strip()
+                continue
+            if pending_number:
+                sentence = f"{pending_number} {sentence}"
+                pending_number = None
+            numbered_sentences.append(sentence)
+        if pending_number:
+            numbered_sentences.append(pending_number)
+        sentences = numbered_sentences
+
+        section_start = next(
+            (
+                index for index, sentence in enumerate(sentences)
+                if ACTION_SECTION_START_PATTERN.search(sentence)
+                or ACTION_SECTION_TITLE_PATTERN.fullmatch(sentence.strip())
+            ),
+            None,
+        )
+        if section_start is not None:
+            section_end = next(
+                (
+                    index for index in range(section_start + 1, len(sentences))
+                    if ACTION_SECTION_END_PATTERN.search(sentences[index])
+                    or ACTION_SECTION_TITLE_PATTERN.fullmatch(sentences[index].strip())
+                ),
+                len(sentences),
+            )
+            sentences = sentences[section_start + 1:section_end]
+
+        combined = []
+        for sentence in sentences:
+            if re.match(r"^\s*(?:deadline|due date)\s*:", sentence, re.I) and combined:
+                combined[-1] = f"{combined[-1]} {sentence.strip()}"
+            else:
+                combined.append(sentence)
+        return combined
+
     def _extract_tasks(self, text: str, speakers: dict, doc) -> list:
         """Extract tasks with person, description, deadline, and priority."""
-        sentences = sent_tokenize(text)
-        action_patterns = [re.compile(p, re.I) for p in config.ACTION_PATTERNS]
+        sentences = self._action_item_section_sentences(text)
         speaker_names = list(speakers.keys())
 
         # Get date entities from spaCy
@@ -336,7 +461,7 @@ class MeetingAnalyzer:
         seen_tasks = set()
 
         for sent in sentences:
-            if not any(p.search(sent) for p in action_patterns):
+            if not self._is_action_item_candidate(sent, speaker_names):
                 continue
             if len(sent.split()) < 5:
                 continue
@@ -386,6 +511,16 @@ class MeetingAnalyzer:
 
     def _extract_deadline(self, sent: str, doc) -> str:
         """Extract deadline using spaCy NER + regex fallback."""
+        day_month_year = re.search(
+            r"\b\d{1,2}(?:st|nd|rd|th)?\s+"
+            r"(?:january|february|march|april|may|june|july|august|september|"
+            r"october|november|december)\s+\d{4}\b",
+            sent,
+            re.I,
+        )
+        if day_month_year:
+            return day_month_year.group(0).title()
+
         # spaCy DATE entities
         for ent in doc.ents:
             if ent.label_ == "DATE":

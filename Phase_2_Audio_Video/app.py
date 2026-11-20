@@ -1817,11 +1817,6 @@ elif page == "Results Dashboard":
             f"Detected: {detected.get('language', 'English')} ({detected.get('confidence', 'low')} confidence) · "
             f"Output: {result.get('output_language', 'English')}"
         )
-        current_meeting_id = st.session_state.get("current_meeting_id")
-        if current_meeting_id is not None:
-            current_meeting = kb.get(current_meeting_id)
-            if current_meeting:
-                render_recording(current_meeting)
 
         # Stats bar
         stats = result.get("stats", {})
@@ -2160,15 +2155,15 @@ elif page == "Knowledge Base":
         )
         st.caption(f"Found **{len(meetings)}** results for \"{search_query}\"")
     else:
-        meetings = []
-        stored_count = (
-            1 if scoped_meeting_id is not None else len(kb.list_meetings())
-        )
-        if stored_count:
-            if scoped_meeting_id is not None:
-                st.info("Search within the loaded meeting, or switch the scope to search all saved meetings.")
-            else:
-                st.info(f"{stored_count} meetings are stored. Search for a topic, person, decision, or action item.")
+        meetings = [
+            meeting
+            for meeting in kb.list_meetings(limit=500)
+            if scoped_meeting_id is None or meeting["id"] == scoped_meeting_id
+        ]
+        if meetings:
+            st.caption(f"Showing **{len(meetings)}** saved meetings and recordings.")
+        elif scoped_meeting_id is not None:
+            st.info("The loaded meeting is no longer available. Switch to all meetings to browse the knowledge base.")
         else:
             st.info("Analyze a meeting first to build your searchable knowledge base.")
 
@@ -2186,6 +2181,9 @@ elif page == "Knowledge Base":
                 st.caption(str(m.get("date", ""))[:10])
                 if m.get("recording_name"):
                     st.caption(f"Recording: {m['recording_name']}")
+                if m.get("recording_path"):
+                    with st.expander("Play saved recording"):
+                        render_recording(m)
 
                 load_col, delete_col = st.columns([3, 1])
                 if load_col.button(
@@ -2278,17 +2276,29 @@ elif page == "Memory Assistant":
 elif page == "Accountability Center":
     st.markdown('<h1 class="hero-header">Accountability Center</h1>', unsafe_allow_html=True)
     current_meeting_id = st.session_state.get("current_meeting_id")
-    task_scopes = ["Loaded meeting", "All meetings"] if current_meeting_id is not None else ["All meetings"]
-    task_scope = st.selectbox(
-        "Task scope",
-        task_scopes,
-        key=f"accountability_scope_{current_meeting_id or 'all'}",
+    task_meetings = kb.list_meetings(limit=500)
+    selected_task_meeting = st.selectbox(
+        "Meeting to track",
+        options=[None, *task_meetings],
+        index=next(
+            (index + 1 for index, meeting in enumerate(task_meetings)
+             if meeting["id"] == current_meeting_id),
+            0,
+        ),
+        format_func=lambda meeting: (
+            "All meetings" if meeting is None
+            else f"{meeting['title']} · {str(meeting.get('date', ''))[:10]} · #{meeting['id']}"
+        ),
+        key=f"accountability_meeting_{current_meeting_id or 'all'}",
     )
-    scoped_meeting_id = current_meeting_id if task_scope == "Loaded meeting" else None
-    st.markdown(
-        '<p class="hero-sub">Track commitments from the selected meeting or across your saved meeting history.</p>',
-        unsafe_allow_html=True,
+    scoped_meeting_id = (
+        selected_task_meeting["id"] if selected_task_meeting is not None else None
     )
+    task_scope_label = (
+        f"{selected_task_meeting['title']} · #{selected_task_meeting['id']}"
+        if selected_task_meeting is not None else "all saved meetings"
+    )
+    st.caption(f"Tracking tasks for **{task_scope_label}**.")
     tasks = get_accountability_tasks(scoped_meeting_id)
     today = datetime.now().date()
     overdue = [task for task in tasks if task["due_date"] and task["due_date"] < today and task["status"] != "done"]
